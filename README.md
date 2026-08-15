@@ -54,12 +54,16 @@ Para remover também o volume local de dados, use `docker compose down --volumes
 
 ```bash
 npm ci
-npm run db:migrate
-npm run db:seed
 npm run dev
 ```
 
-O frontend usa `/api/v1` por padrão. Para origens separadas em desenvolvimento, configure `VITE_API_URL` e a allowlist `CORS_ORIGINS`.
+O comando prepara automaticamente o PostgreSQL de desenvolvimento pelo Docker, aplica migrations/seed e inicia:
+
+- frontend com hot reload: `http://localhost:5173`;
+- API NestJS: `http://localhost:3001/api/v1`;
+- PostgreSQL restrito a `127.0.0.1:5433`.
+
+Use `Ctrl+C` para encerrar API e frontend. O banco continua no Docker para preservar os dados; `docker compose stop postgres` o encerra. A porta local do banco pode ser alterada com `POSTGRES_DEV_PORT` no `.env`.
 
 ## Verificação
 

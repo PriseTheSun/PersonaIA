@@ -1,0 +1,147 @@
+import { existsSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { createConnection } from 'node:net';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const projectRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+const envPath = join(projectRoot, '.env');
+
+if (!existsSync(envPath)) {
+  console.error('Arquivo .env ausente. Execute: cp .env.example .env');
+  process.exit(1);
+}
+
+process.loadEnvFile(envPath);
+
+const requiredVariables = [
+  'POSTGRES_DB',
+  'POSTGRES_MIGRATION_USER',
+  'POSTGRES_MIGRATION_PASSWORD',
+  'APP_DB_USER',
+  'APP_DB_PASSWORD',
+  'JWT_ACCESS_SECRET',
+  'JWT_REFRESH_SECRET',
+  'SUPER_ADMIN_EMAIL',
+  'SUPER_ADMIN_PASSWORD',
+];
+const invalidVariables = requiredVariables.filter((name) => {
+  const value = process.env[name];
+  return !value || value.includes('REPLACE_');
+});
+
+if (invalidVariables.length > 0) {
+  console.error(`Configure valores reais no .env: ${invalidVariables.join(', ')}`);
+  process.exit(1);
+}
+
+const databasePort = process.env.POSTGRES_DEV_PORT ?? '5433';
+const databaseUrl = new URL('postgresql://127.0.0.1');
+databaseUrl.username = process.env.APP_DB_USER;
+databaseUrl.password = process.env.APP_DB_PASSWORD;
+databaseUrl.port = databasePort;
+databaseUrl.pathname = `/${process.env.POSTGRES_DB}`;
+databaseUrl.searchParams.set('schema', 'public');
+
+const localOrigins = ['http://localhost:5173', 'http://127.0.0.1:5173'];
+const configuredOrigins = (process.env.CORS_ORIGINS ?? '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const developmentEnvironment = {
+  ...process.env,
+  NODE_ENV: 'development',
+  PORT: '3001',
+  DATABASE_URL: databaseUrl.toString(),
+  CORS_ORIGINS: [...new Set([...configuredOrigins, ...localOrigins])].join(','),
+  COOKIE_SECURE: 'false',
+  VITE_API_PROXY_TARGET: 'http://127.0.0.1:3001',
+};
+
+const isPortOccupied = (port) => new Promise((resolve) => {
+  const probe = createConnection({ host: '127.0.0.1', port });
+  let completed = false;
+  const finish = (occupied) => {
+    if (completed) return;
+    completed = true;
+    probe.destroy();
+    resolve(occupied);
+  };
+  probe.unref();
+  probe.setTimeout(400);
+  probe.once('connect', () => finish(true));
+  probe.once('timeout', () => finish(false));
+  probe.once('error', (error) => finish(error.code !== 'ECONNREFUSED'));
+});
+
+const applicationPorts = [
+  { port: 3001, label: 'API' },
+  { port: 5173, label: 'Frontend' },
+];
+const occupiedPorts = (await Promise.all(applicationPorts.map(async (entry) => ({
+  ...entry,
+  occupied: await isPortOccupied(entry.port),
+})))).filter((entry) => entry.occupied);
+
+if (occupiedPorts.length > 0) {
+  console.error(`A aplicação já parece estar em execução (${occupiedPorts.map(({ label, port }) => `${label} ${port}`).join(', ')}).`);
+  console.error('Abra http://localhost:5173. Para reiniciar, use Ctrl+C no terminal anterior antes de executar npm run dev novamente.');
+  process.exit(1);
+}
+
+console.log('Preparando PostgreSQL local na porta 127.0.0.1:' + databasePort + '...');
+const composeArguments = ['compose', '-f', 'compose.yml', '-f', 'compose.dev.yml'];
+const runDocker = (argumentsList) => {
+  const result = spawnSync('docker', [...composeArguments, ...argumentsList], {
+    cwd: projectRoot,
+    env: developmentEnvironment,
+    stdio: 'inherit',
+  });
+  if (result.error?.code === 'ENOENT') {
+    console.error('Docker não foi encontrado. Instale/inicie o Docker Desktop e tente novamente.');
+    process.exit(1);
+  }
+  if (result.status !== 0) {
+    console.error('Não foi possível preparar o PostgreSQL de desenvolvimento.');
+    process.exit(result.status ?? 1);
+  }
+};
+
+runDocker(['up', '-d', '--wait', 'postgres']);
+runDocker(['run', '--rm', '--no-deps', '--build', 'migrate']);
+runDocker(['run', '--rm', '--no-deps', 'db-permissions']);
+
+const concurrentlyExecutable = join(
+  projectRoot,
+  'node_modules',
+  '.bin',
+  process.platform === 'win32' ? 'concurrently.cmd' : 'concurrently',
+);
+const application = spawn(
+  concurrentlyExecutable,
+  [
+    '--kill-others-on-fail',
+    '-n',
+    'api,web',
+    '-c',
+    'blue,green',
+    'npm run start:dev -w @personaia/api',
+    'npm run dev -w @personaia/web',
+  ],
+  { cwd: projectRoot, env: developmentEnvironment, stdio: 'inherit' },
+);
+
+const stop = (signal) => {
+  if (!application.killed) application.kill(signal);
+};
+process.once('SIGINT', () => stop('SIGINT'));
+process.once('SIGTERM', () => stop('SIGTERM'));
+application.once('error', (error) => {
+  console.error(`Falha ao iniciar API e frontend: ${error.message}`);
+  process.exit(1);
+});
+application.once('exit', (code, signal) => {
+  if (signal) process.kill(process.pid, signal);
+  else process.exit(code ?? 0);
+});
