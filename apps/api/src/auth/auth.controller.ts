@@ -9,12 +9,17 @@ import { Principal } from '../common/types/principal';
 import { newCsrfToken } from '../common/security';
 import { Roles } from '../common/decorators/roles.decorator';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
+import { AccessControlService } from '../common/access-control.service';
 import { AuthService } from './auth.service';
 import { LoginInput, loginSchema, RegisterInput, registerSchema } from './auth.schemas';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly auth: AuthService, private readonly config: ConfigService) {}
+  constructor(
+    private readonly auth: AuthService,
+    private readonly config: ConfigService,
+    private readonly access: AccessControlService,
+  ) {}
 
   @Public()
   @CsrfExempt()
@@ -59,10 +64,10 @@ export class AuthController {
   }
 
   @Get('me')
-  @Roles('SUPER_ADMIN', 'CLIENT_ADMIN', 'PROJECT_USER')
-  me(@CurrentUser() user: Principal) {
+  @Roles('SUPER_ADMIN', 'CLIENT_ADMIN', 'WORKSPACE_ADMIN', 'WORKSPACE_MEMBER', 'PROJECT_USER')
+  async me(@CurrentUser() user: Principal) {
     const { tokenVersion: _tokenVersion, ...safe } = user;
-    return safe;
+    return { ...safe, contexts: await this.access.contexts(user.id) };
   }
 
   private setRefreshCookie(response: Response, token: string, rememberMe: boolean) {

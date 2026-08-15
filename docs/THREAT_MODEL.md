@@ -7,10 +7,11 @@ topologia de deploy.
 
 ## 1. Escopo e premissas
 
-O sistema permite que Super Admins criem tenants e seus Client Admins. Cada Client
-Admin pertence a exatamente um tenant, gerencia N projetos e N usuários nesses
-projetos, move usuários e controla permissões por projeto. O conteúdo funcional de
-personas e pesquisas ainda será detalhado.
+O sistema permite que Super Admins criem clientes, identidades globais sejam
+vinculadas independentemente a N clientes e os administradores desses clientes
+gerenciem workspaces, projetos, usuários e permissões funcionais. Personas e
+questionários existem uma vez no cliente, podem ser associados por referência a N
+workspaces do mesmo cliente e mantêm snapshots históricos quando usados em projetos.
 
 Premissas a validar durante a implementação:
 
@@ -24,8 +25,8 @@ Premissas a validar durante a implementação:
 
 1. Isolamento de dados entre tenants.
 2. Credenciais, sessões e fatores de autenticação.
-3. Permissões por projeto e autoridade global.
-4. Personas, respostas de pesquisa e possíveis dados pessoais.
+3. Vínculos por cliente/workspace, herança, overrides, negações e autoridade global.
+4. Personas, questionários, snapshots e possíveis dados pessoais.
 5. Integridade dos registros de auditoria.
 6. Disponibilidade da API e do PostgreSQL.
 7. Segredos de infraestrutura, backups e artefatos de build.
@@ -33,7 +34,7 @@ Premissas a validar durante a implementação:
 ### Atores
 
 - usuário anônimo/atacante externo;
-- usuário de projeto autenticado;
+- membro de workspace autenticado e possivelmente vinculado a múltiplos clientes;
 - Client Admin honesto ou malicioso;
 - Super Admin comprometido ou malicioso;
 - dependência/serviço externo comprometido;
@@ -71,6 +72,10 @@ manager, CI→registry/runtime e operadores→infraestrutura.
 | AB-10 | Container/dependência comprometida acessa DB/segredos | Compromisso sistêmico | P0 | least privilege, scans, rede, runtime hardening |
 | AB-11 | Super Admin abusa do acesso global sem detecção | Vazamento global | P0 | MFA, reauth, auditoria imutável, alertas e dual control futuro |
 | AB-12 | Bulk/export/job omite escopo do tenant | Vazamento silencioso | P0 | serviço tenant-aware e teste por superfície |
+| AB-13 | Override de projeto é ignorado ou `ALLOW` herdado vence `DENY` explícito | Elevação de privilégio | P0 | resolver único deny-first; testes por feature/nível/escopo |
+| AB-14 | Corrida remove os dois últimos administradores do cliente/workspace | Escopo órfão e indisponível | P1 | lock/isolamento serializável; teste concorrente |
+| AB-15 | Ativo é associado a workspace de outro cliente ou excluído em uso | Vazamento/perda histórica | P0 | FK composta; bloqueio por uso ativo; snapshot imutável |
+| AB-16 | Usuário troca o tenant selecionado e reutiliza papel de outro vínculo | BOLA/BFLA cross-tenant | P0 | contexto por rota + membership no DB por requisição |
 
 ## 4. STRIDE
 
@@ -159,4 +164,3 @@ como `Pass`, `Fail`, `N/A` justificado ou `Not tested`, e anexar evidência.
 - Evidências dos testes críticos estão anexadas ao release.
 - Security review é repetida antes de habilitar funções de personas/pesquisas em
   produção.
-

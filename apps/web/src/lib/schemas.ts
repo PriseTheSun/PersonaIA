@@ -1,15 +1,89 @@
 import { z } from 'zod';
 
-export const roleSchema = z.enum(['SUPER_ADMIN', 'CLIENT_ADMIN', 'PROJECT_USER']);
+export const roleSchema = z.enum(['SUPER_ADMIN', 'CLIENT_ADMIN', 'WORKSPACE_ADMIN', 'WORKSPACE_MEMBER', 'PROJECT_USER']);
 export type Role = z.infer<typeof roleSchema>;
+
+export const clientRoleSchema = z.enum(['CLIENT_ADMIN', 'CLIENT_MEMBER']);
+export type ClientRole = z.infer<typeof clientRoleSchema>;
+
+export const workspaceRoleSchema = z.enum(['WORKSPACE_ADMIN', 'WORKSPACE_MEMBER']);
+export type WorkspaceRole = z.infer<typeof workspaceRoleSchema>;
+
+export const membershipStatusSchema = z.enum(['PENDING_APPROVAL', 'PENDING', 'INVITED', 'ACTIVE', 'SUSPENDED', 'REMOVED', 'ARCHIVED']);
+export type MembershipStatus = z.infer<typeof membershipStatusSchema>;
+
+export const featureSchema = z.enum(['PERSONA', 'RESEARCH', 'SIMULATION', 'DASHBOARD']);
+export type FunctionalFeature = z.infer<typeof featureSchema>;
+
+export const accessLevelSchema = z.enum(['READ', 'WRITE', 'ADMIN']);
+export type AccessLevel = z.infer<typeof accessLevelSchema>;
+
+export const permissionEffectSchema = z.enum(['ALLOW', 'DENY']);
+export type PermissionEffect = z.infer<typeof permissionEffectSchema>;
+
+export const functionalPermissionSchema = z.object({
+  feature: featureSchema,
+  level: accessLevelSchema,
+  effect: permissionEffectSchema.default('ALLOW'),
+  source: z.enum(['WORKSPACE', 'PROJECT', 'ROLE']).optional(),
+  inherited: z.boolean().optional(),
+});
+export type FunctionalPermission = z.infer<typeof functionalPermissionSchema>;
+
+const canonicalAuthContextSchema = z.object({
+  tenantId: z.string().min(1),
+  tenantName: z.string().min(1),
+  tenantSlug: z.string().optional(),
+  clientRole: clientRoleSchema.optional(),
+  status: membershipStatusSchema.default('ACTIVE'),
+  workspaces: z.array(z.object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    role: workspaceRoleSchema,
+    status: membershipStatusSchema.default('ACTIVE'),
+    permissions: z.array(functionalPermissionSchema).default([]),
+  })).default([]),
+});
+
+const backendAuthContextSchema = z.object({
+  tenantId: z.string().min(1),
+  role: clientRoleSchema,
+  status: membershipStatusSchema.default('ACTIVE'),
+  selected: z.boolean().optional(),
+  tenant: z.object({ id: z.string(), name: z.string(), slug: z.string().optional(), status: z.string().optional() }),
+  workspaces: z.array(z.object({
+    workspaceId: z.string().min(1),
+    role: workspaceRoleSchema,
+    status: membershipStatusSchema.default('ACTIVE'),
+    workspace: z.object({ id: z.string(), name: z.string(), slug: z.string().optional(), isDefault: z.boolean().optional() }),
+    permissions: z.array(functionalPermissionSchema).default([]),
+  })).default([]),
+});
+
+export const authContextSchema = z.union([canonicalAuthContextSchema, backendAuthContextSchema]).transform((context) => 'tenantName' in context ? context : ({
+  tenantId: context.tenantId,
+  tenantName: context.tenant.name,
+  tenantSlug: context.tenant.slug,
+  clientRole: context.role,
+  status: context.status,
+  workspaces: context.workspaces.map((item) => ({
+    id: item.workspaceId,
+    name: item.workspace.name,
+    role: item.role,
+    status: item.status,
+    permissions: item.permissions,
+  })),
+}));
+export type AuthContext = z.infer<typeof authContextSchema>;
 
 export const userSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   email: z.string().email(),
-  role: roleSchema,
+  role: roleSchema.default('PROJECT_USER'),
   tenantId: z.string().nullable().optional(),
-  status: z.enum(['PENDING', 'ACTIVE', 'INVITED', 'SUSPENDED', 'ARCHIVED']).default('ACTIVE'),
+  status: membershipStatusSchema.default('ACTIVE'),
+  contexts: z.array(authContextSchema).optional(),
   createdAt: z.string().datetime().optional(),
 });
 export type User = z.infer<typeof userSchema>;
@@ -19,7 +93,11 @@ export const tenantSchema = z.object({
   name: z.string().min(1),
   slug: z.string().min(1),
   status: z.enum(['ACTIVE', 'SUSPENDED']).default('ACTIVE'),
+  segment: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
   adminCount: z.number().int().nonnegative().default(0),
+  memberCount: z.number().int().nonnegative().default(0),
+  workspaceCount: z.number().int().nonnegative().default(0),
   projectCount: z.number().int().nonnegative().default(0),
   createdAt: z.string(),
 });
@@ -29,11 +107,89 @@ export const projectSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   description: z.string().nullable().optional(),
+  workspaceId: z.string().min(1).optional(),
+  workspace: z.object({ id: z.string(), name: z.string() }).optional(),
   status: z.enum(['ACTIVE', 'ARCHIVED']).default('ACTIVE'),
   memberCount: z.number().int().nonnegative().default(0),
   updatedAt: z.string(),
 });
 export type Project = z.infer<typeof projectSchema>;
+
+export const workspaceSchema = z.object({
+  id: z.string().min(1),
+  tenantId: z.string().min(1),
+  name: z.string().min(1),
+  slug: z.string().optional(),
+  description: z.string().nullable().optional(),
+  status: z.enum(['ACTIVE', 'SUSPENDED', 'ARCHIVED']).default('ACTIVE'),
+  isDefault: z.boolean().default(false),
+  memberCount: z.number().int().nonnegative().default(0),
+  projectCount: z.number().int().nonnegative().default(0),
+  personaCount: z.number().int().nonnegative().default(0),
+  questionnaireCount: z.number().int().nonnegative().default(0),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+  _count: z.object({ memberships: z.number().optional(), projects: z.number().optional(), personas: z.number().optional(), questionnaires: z.number().optional() }).optional(),
+}).transform((workspace) => ({
+  ...workspace,
+  memberCount: workspace._count?.memberships ?? workspace.memberCount,
+  projectCount: workspace._count?.projects ?? workspace.projectCount,
+  personaCount: workspace._count?.personas ?? workspace.personaCount,
+  questionnaireCount: workspace._count?.questionnaires ?? workspace.questionnaireCount,
+}));
+export type Workspace = z.infer<typeof workspaceSchema>;
+
+export const clientMembershipSchema = z.object({
+  id: z.string().optional(),
+  tenantId: z.string().min(1),
+  userId: z.string().min(1),
+  role: clientRoleSchema,
+  status: membershipStatusSchema,
+  user: userSchema,
+  workspaceCount: z.number().int().nonnegative().default(0),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+  _count: z.object({ workspaceMemberships: z.number().optional() }).optional(),
+}).transform((membership) => ({ ...membership, workspaceCount: membership._count?.workspaceMemberships ?? membership.workspaceCount }));
+export type ClientMembership = z.infer<typeof clientMembershipSchema>;
+
+export const workspaceMembershipSchema = z.object({
+  id: z.string().optional(),
+  workspaceId: z.string().min(1),
+  userId: z.string().min(1),
+  role: workspaceRoleSchema,
+  status: membershipStatusSchema,
+  user: userSchema,
+  permissions: z.array(functionalPermissionSchema).default([]),
+  effectivePermissions: z.array(functionalPermissionSchema).default([]),
+  workspacePermissions: z.array(functionalPermissionSchema).optional(),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+}).transform((membership) => ({
+  ...membership,
+  permissions: membership.workspacePermissions ?? membership.permissions,
+  effectivePermissions: membership.effectivePermissions.length ? membership.effectivePermissions : (membership.workspacePermissions ?? membership.permissions),
+}));
+export type WorkspaceMembership = z.infer<typeof workspaceMembershipSchema>;
+
+const assetBaseSchema = z.object({
+  id: z.string().min(1),
+  tenantId: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string().nullable().optional(),
+  status: z.enum(['ACTIVE', 'ARCHIVED']).default('ACTIVE'),
+  workspaceIds: z.array(z.string()).default([]),
+  workspaces: z.array(z.object({ id: z.string(), name: z.string() })).default([]),
+  activeProjectUsageCount: z.number().int().nonnegative().default(0),
+  createdAt: z.string().optional(),
+  updatedAt: z.string().optional(),
+});
+
+export const personaSchema = assetBaseSchema.extend({ kind: z.literal('PERSONA').optional() });
+export type Persona = z.infer<typeof personaSchema>;
+
+export const questionnaireSchema = assetBaseSchema.extend({ kind: z.literal('QUESTIONNAIRE').optional() });
+export type Questionnaire = z.infer<typeof questionnaireSchema>;
 
 export const permissionSchema = z.enum(['VIEWER', 'CONTRIBUTOR', 'MANAGER', 'OWNER']);
 export type Permission = z.infer<typeof permissionSchema>;

@@ -68,7 +68,10 @@ describe('LoginPage', () => {
     expect(within(carousel).getByRole('group', { name: 'Controles do carrossel' }).parentElement).toHaveClass('h-full');
 
     expect(within(carousel).getByText('Entenda o que as pessoas realmente dizem')).toBeInTheDocument();
-    expect(within(carousel).getAllByRole('button', { name: /Ver slide/ })).toHaveLength(5);
+    const slideButtons = within(carousel).getAllByRole('button', { name: /Ver slide/ });
+    expect(slideButtons).toHaveLength(5);
+    expect(slideButtons[0]).toHaveClass('w-5');
+    expect(slideButtons[0].querySelector('.auth-carousel-progress')).toHaveStyle({ animationDuration: '6500ms' });
     await user.click(within(carousel).getByRole('button', { name: /Ver slide 2:/ }));
     expect(within(carousel).getByText('Crie personas consistentes em minutos')).toBeInTheDocument();
     await user.click(within(carousel).getByRole('button', { name: /Ver slide 5:/ }));

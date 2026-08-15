@@ -11,14 +11,19 @@ Baseline de verificação: OWASP ASVS 5.0.0 nível 2 e OWASP API Security Top 10
 
 ## 1. Fronteiras de confiança
 
-- `SUPER_ADMIN` é global e não pertence a tenant.
-- `CLIENT_ADMIN` pertence a exatamente um tenant ativo.
-- Um projeto pertence a exatamente um tenant.
-- Usuários de projeto e suas permissões sempre são vinculados ao par
-  `(tenant_id, project_id)`.
-- O tenant efetivo vem exclusivamente da identidade autenticada e resolvida no
-  servidor. `tenantId` recebido em rota, query, header ou body nunca concede ou
-  amplia acesso.
+- `SUPER_ADMIN` é uma autoridade global atribuída à identidade da plataforma.
+- `CLIENT_ADMIN` é um papel de vínculo no cliente, nunca um papel global do usuário.
+- Uma identidade pode ter vínculos independentes em N clientes e workspaces; um
+  vínculo jamais concede autoridade sobre os demais.
+- Um workspace pertence a exatamente um cliente e um projeto pertence a exatamente
+  um workspace. O workspace de um projeto é imutável.
+- Personas e questionários pertencem a um cliente e são associados a workspaces do
+  mesmo cliente somente por referência.
+- O cliente/workspace efetivo é selecionado explicitamente na rota e confirmado
+  contra vínculos ativos resolvidos no servidor. `tenantId`, `workspaceId`, papel
+  ou permissão recebidos em rota, query, header ou body nunca concedem acesso.
+- Permissões funcionais são resolvidas por recurso e escopo. Override explícito no
+  projeto substitui a herança do workspace e `DENY` explícito sempre prevalece.
 - Ausência de regra explícita implica negação.
 - Rotas e serviços globais de Super Admin ficam separados dos serviços de tenant;
   não existe parâmetro genérico como `bypassTenant=true`.
@@ -40,19 +45,24 @@ formato da resposta devem ser equivalentes ao caso de um ID inexistente.
 
 Estas regras devem existir no PostgreSQL, além das validações da API:
 
-1. Toda tabela tenant-scoped possui `tenant_id NOT NULL`.
-2. `projects` possui chave/índice único `(tenant_id, id)`.
-3. Vínculos de projeto possuem FKs compostas:
-   `(tenant_id, project_id) -> projects(tenant_id, id)` e
-   `(tenant_id, user_id) -> tenant_memberships(tenant_id, user_id)`.
-4. A associação de `CLIENT_ADMIN` impede mais de um tenant ativo por identidade.
-5. O estado global/tenant de administradores é protegido por `CHECK`, por exemplo:
-   Super Admin sem `tenant_id`; Client Admin com `tenant_id` obrigatório.
-6. Troca de usuário entre projetos é uma transação atômica e preserva o mesmo
-   `tenant_id` em origem e destino.
+1. Toda tabela pertencente a cliente possui `tenant_id NOT NULL`; tabelas de
+   workspace também carregam/validam o cliente pai por FK composta.
+2. `workspaces` possui chave única `(tenant_id, id)` e `projects` referencia o par
+   `(tenant_id, workspace_id)`. Nenhuma API ou grant de runtime pode mover projeto.
+3. `client_memberships` possui unicidade `(tenant_id, user_id)` e
+   `workspace_memberships` referencia simultaneamente workspace, cliente e vínculo
+   do usuário no cliente.
+4. Associações de persona/questionário possuem FKs compostas que garantem que ativo
+   e workspace pertençam ao mesmo cliente.
+5. Uso de ativo em projeto valida cliente e workspace e conserva snapshot imutável
+   dos dados usados.
+6. Remoção, suspensão ou downgrade de administradores usa transação serializável ou
+   lock transacional por escopo, impedindo concorrência que remova o último
+   `CLIENT_ADMIN` ou `WORKSPACE_ADMIN` ativo.
 7. Permissões são enumerações/relacionamentos permitidos pelo servidor. Não aceitar
    nomes arbitrários nem flags elevadas pelo cliente.
-8. Exclusões usam estratégia explicitamente definida. Se houver soft delete, todos
+8. Histórico de associações e auditoria são append-only para a role de runtime.
+9. Exclusões usam estratégia explicitamente definida. Se houver soft delete, todos
    os índices de unicidade, queries e RLS consideram `deleted_at` de forma uniforme.
 
 IDs UUID/ULID reduzem enumeração, mas não são um controle de autorização.
@@ -94,8 +104,13 @@ IDs UUID/ULID reduzem enumeração, mas não são um controle de autorização.
 
 - Um guard global autentica e normaliza o principal. Metadados de rota só reduzem,
   nunca ampliam, os requisitos.
-- O contexto imutável contém `subjectId`, `globalRole`, `tenantId` e sessão; a API
-  ignora campos equivalentes enviados pelo cliente.
+- O contexto autenticado contém identidade e autoridade global. O contexto de
+  cliente/workspace é carregado do banco por requisição a partir dos identificadores
+  da rota e nunca é aceito como claim autoritativa do cliente.
+- `CLIENT_ADMIN`, `WORKSPACE_ADMIN`, estados dos vínculos e grants funcionais são
+  consultados no servidor a cada operação protegida, garantindo revogação imediata.
+- O resolver central recebe sujeito, cliente, workspace, projeto, funcionalidade e
+  ação; aplica papéis implícitos, override de projeto e precedência deny-first.
 - Controllers não consultam repositórios diretamente. Serviços tenant-scoped
   recebem o contexto e usam métodos como `findByIdForTenant(id, tenantId)`.
 - DTOs/schemas fazem allowlist de propriedades e rejeitam campos desconhecidos
@@ -192,4 +207,3 @@ Canal de reporte e SLA de triagem devem ser publicados antes do go-live.
 - [OWASP ASVS 5.0.0](https://github.com/OWASP/ASVS/tree/v5.0.0_release/5.0/en)
 - [OWASP API Security Top 10 2023](https://owasp.org/API-Security/editions/2023/en/0x03-introduction/)
 - [OWASP Cheat Sheet Series](https://cheatsheetseries.owasp.org/)
-

@@ -3,9 +3,15 @@ import { z } from 'zod';
 const permissionSchema = z.enum(['OWNER', 'MANAGER', 'CONTRIBUTOR', 'VIEWER']);
 
 export const createProjectSchema = z.object({
+  workspaceId: z.string().uuid().optional(),
   name: z.string().trim().min(2).max(120),
   slug: z.string().trim().min(2).max(80).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).optional(),
   description: z.string().trim().max(500).optional()
+}).strict();
+
+export const projectQuerySchema = z.object({
+  tenantId: z.string().uuid().optional(),
+  workspaceId: z.string().uuid().optional(),
 }).strict();
 
 export const updateProjectSchema = z.object({
@@ -30,8 +36,23 @@ export const moveMemberSchema = z.object({
   permission: permissionSchema.default('VIEWER')
 }).strict();
 
+const functionalPermissionSchema = z.object({
+  feature: z.enum(['PERSONA', 'RESEARCH', 'SIMULATION', 'DASHBOARD']),
+  level: z.enum(['READ', 'WRITE', 'ADMIN']),
+  effect: z.enum(['ALLOW', 'DENY']).default('ALLOW'),
+}).strict();
+
+export const replaceProjectPermissionsSchema = z.object({
+  permissions: z.array(functionalPermissionSchema).max(4),
+}).strict().superRefine((value, context) => {
+  const features = value.permissions.map((item) => item.feature);
+  if (new Set(features).size !== features.length) context.addIssue({ code: 'custom', message: 'Cada funcionalidade deve aparecer apenas uma vez.' });
+});
+
 export type CreateProjectInput = z.infer<typeof createProjectSchema>;
 export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
 export type AddMemberInput = z.infer<typeof addMemberSchema>;
 export type UpdatePermissionInput = z.output<typeof updatePermissionSchema>;
 export type MoveMemberInput = z.infer<typeof moveMemberSchema>;
+export type ProjectQuery = z.infer<typeof projectQuerySchema>;
+export type ReplaceProjectPermissionsInput = z.infer<typeof replaceProjectPermissionsSchema>;

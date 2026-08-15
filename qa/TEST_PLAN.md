@@ -92,7 +92,11 @@ Client Admin nunca pode criar/atribuir `SUPER_ADMIN`.
 
 ## 4. Autorização por função e propriedade
 
-As permissões finas serão definidas depois. Até lá, o comportamento é deny-by-default.
+As permissões funcionais são `PERSONA`, `RESEARCH`, `SIMULATION` e `DASHBOARD`,
+com níveis `READ`, `WRITE`, `ADMIN` e efeitos `ALLOW`/`DENY`. Defaults do workspace
+são herdados pelos projetos, override de projeto substitui a herança e negação
+explícita vence. A rastreabilidade executável completa fica em
+[`SPEC_ACCEPTANCE_MATRIX.md`](./SPEC_ACCEPTANCE_MATRIX.md).
 
 | ID | Cenário | Resultado esperado |
 |---|---|---|
@@ -107,16 +111,19 @@ As permissões finas serão definidas depois. Até lá, o comportamento é deny-
 | AUTZ-009 | ação não mapeada na tabela de permissões | negada |
 | AUTZ-010 | permissão de projeto A1 usada em A2 | negada |
 | AUTZ-011 | edição concorrente de permissões | sem lost update; versão/conflito tratado |
+| AUTZ-012 | `DENY` no projeto contra `ADMIN` herdado | acesso negado no projeto; herança permanece nos demais |
+| AUTZ-013 | JWT após membership revogada | requisição seguinte negada sem exigir relogin |
+| AUTZ-014 | membro PERSONA WRITE cria projeto | cria sem receber ADMIN ou papel administrativo implicitamente |
 
-Quando o produto definir permissões, manter uma tabela versionada `papel × recurso ×
-ação × escopo` e gerar testes parametrizados a partir dela.
+Manter uma tabela versionada `papel × recurso × ação × escopo` e gerar testes
+parametrizados a partir dela. Endpoint protegido sem policy é falha de release.
 
 ## 5. Funcional e consistência
 
 | Área | Casos mínimos |
 |---|---|
 | Tenant | criar, duplicidade, suspender, reativar, paginação, estado inválido, auditoria |
-| Client Admin | convite, aceite, expiração, reenvio, desativação, exatamente um tenant |
+| Client membership | convite, aceite, expiração, reenvio, suspensão/remoção, múltiplos clientes independentes e último CLIENT_ADMIN |
 | Projeto | CRUD, validação de nome/limites, duplicidade definida, soft/hard delete |
 | Usuário | adicionar existente/novo, duplicado, remover, desativado, último admin |
 | Movimentação | origem=destino, origem ausente, destino ausente, concorrência, rollback |
@@ -258,6 +265,45 @@ bash qa/blackbox-multitenancy.sh
 
 Nunca executar testes mutáveis em produção. Para habilitá-los apenas em ambiente
 descartável, defina `RUN_MUTATING=1` e revise paths/payloads primeiro.
+
+A suíte específica da regra nova autentica usuários reais e cobre IDs cruzados,
+mass assignment, estado pendente, identidade multicliente e revogação imediata:
+
+```bash
+cp qa/spec-blackbox.config.example.json /tmp/personaia-spec-qa.json
+# Preencha somente com fixtures de um banco descartável.
+SPEC_QA_CONFIG=/tmp/personaia-spec-qa.json \
+node --test qa/spec-blackbox.test.mjs
+
+# Mutações são opt-in e nunca devem apontar para produção.
+RUN_MUTATING=1 SPEC_QA_CONFIG=/tmp/personaia-spec-qa.json \
+node --test qa/spec-blackbox.test.mjs
+```
+
+O arquivo real de configuração contém credenciais e não deve ser salvo no repositório
+nem anexado à evidência.
+
+O runner serializa logins e, por padrão, aguarda `12.500 ms` entre tentativas para
+respeitar o rate limit real de 5/minuto. Em ambiente de QA cujo limitador tenha sido
+explicitamente isolado/configurado, `QA_LOGIN_INTERVAL_MS` pode ajustar esse tempo;
+não contorne o rate limit em produção.
+
+As constraints, triggers append-only, FK compostas e sobrevivência do snapshot são
+validadas diretamente no PostgreSQL real dentro de uma transação revertida:
+
+```bash
+psql "$DATABASE_URL" -f qa/postgres-invariants.sql
+```
+
+Use credencial de teste/migration em banco descartável; a role de runtime também deve
+ser testada separadamente para comprovar least privilege.
+
+A paridade de chaves e placeholders entre `pt-BR`, `es` e `en` é executável sem
+dependência externa:
+
+```bash
+node --test qa/i18n-parity.test.mjs
+```
 
 ## 12. Template de evidência e defeito
 

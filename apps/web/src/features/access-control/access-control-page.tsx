@@ -41,13 +41,13 @@ export function AccessControlPage() {
   const allItems = useMemo(() => query.status === 'success' ? query.data : [], [query]);
   const counts = useMemo(() => ({
     ALL: allItems.length,
-    PENDING: allItems.filter((user) => user.status === 'PENDING').length,
+    PENDING: allItems.filter((user) => user.status === 'PENDING' || user.status === 'PENDING_APPROVAL').length,
     ACTIVE: allItems.filter((user) => user.status === 'ACTIVE').length,
     SUSPENDED: allItems.filter((user) => user.status === 'SUSPENDED').length,
     ARCHIVED: allItems.filter((user) => user.status === 'ARCHIVED').length,
   }), [allItems]);
   const items = useMemo(() => allItems.filter((user) => {
-    const matchesStatus = filter === 'ALL' || user.status === filter;
+    const matchesStatus = filter === 'ALL' || user.status === filter || (filter === 'PENDING' && user.status === 'PENDING_APPROVAL');
     const text = `${user.name} ${user.email} ${user.tenant?.name ?? ''}`.toLowerCase();
     return matchesStatus && text.includes(search.toLowerCase());
   }), [allItems, filter, search]);
@@ -71,9 +71,10 @@ export function AccessControlPage() {
       await apiRequest(`/user-access/${encodeURIComponent(user.id)}`, z.unknown(), {
         method: 'PATCH', headers: csrfHeaders(), body: input
       });
-      toast.success(input.status === 'ACTIVE' && user.status === 'PENDING'
+      const wasPending = user.status === 'PENDING' || user.status === 'PENDING_APPROVAL';
+      toast.success(input.status === 'ACTIVE' && wasPending
         ? t('accessControl.approved')
-        : input.status === 'ARCHIVED' && user.status === 'PENDING'
+        : input.status === 'ARCHIVED' && wasPending
           ? t('accessControl.rejected')
           : t('accessControl.updated'));
       setEditingId(null);
@@ -119,7 +120,7 @@ export function AccessControlPage() {
                   <TableCell className="min-w-56"><div className="flex items-center gap-3"><Avatar name={user.name} /><div className="min-w-0"><div className="truncate font-medium">{user.name}{isSelf ? <span className="ml-2 text-xs font-normal text-muted-foreground">{t('accessControl.you')}</span> : null}</div><div className="truncate text-xs text-muted-foreground">{user.email}</div><div className="mt-1 text-xs text-muted-foreground md:hidden">{t(`roles.${user.role}`)}{user.tenant ? ` · ${user.tenant.name}` : ''}</div></div></div></TableCell>
                   <TableCell className="hidden md:table-cell">{t(`roles.${user.role}`)}</TableCell>
                   <TableCell className="hidden text-muted-foreground lg:table-cell">{user.tenant?.name ?? t('accessControl.platform')}</TableCell>
-                  <TableCell><div className="flex min-w-max items-center gap-2"><StatusBadge status={user.status} />{user.status === 'PENDING' && canManage ? <><Button size="sm" onClick={() => updateUser(user, { status: 'ACTIVE' })} loading={mutatingId === user.id}><CheckCircle2 />{t('accessControl.approve')}</Button><Button size="sm" variant="outline" onClick={() => updateUser(user, { status: 'ARCHIVED' })} disabled={mutatingId === user.id}><CircleX />{t('accessControl.reject')}</Button></> : null}</div></TableCell>
+                  <TableCell><div className="flex min-w-max items-center gap-2"><StatusBadge status={user.status} />{(user.status === 'PENDING' || user.status === 'PENDING_APPROVAL') && canManage ? <><Button size="sm" onClick={() => updateUser(user, { status: 'ACTIVE' })} loading={mutatingId === user.id}><CheckCircle2 />{t('accessControl.approve')}</Button><Button size="sm" variant="outline" onClick={() => updateUser(user, { status: 'ARCHIVED' })} disabled={mutatingId === user.id}><CircleX />{t('accessControl.reject')}</Button></> : null}</div></TableCell>
                   <TableCell className="hidden text-muted-foreground xl:table-cell">{user.createdAt ? formatDate(user.createdAt, i18n.language) : t('common.unknown')}</TableCell>
                   <TableCell>
                     <DropdownMenu>
@@ -127,8 +128,8 @@ export function AccessControlPage() {
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onSelect={() => setEditingId(user.id)}><UserRoundCog />{t('accessControl.editAccess')}</DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        {user.status !== 'ACTIVE' ? <DropdownMenuItem onSelect={() => updateUser(user, { status: 'ACTIVE' })}><RotateCcw />{user.status === 'PENDING' ? t('accessControl.approve') : t('accessControl.activate')}</DropdownMenuItem> : <DropdownMenuItem className="text-destructive" onSelect={() => updateUser(user, { status: 'SUSPENDED' })}><Ban />{t('accessControl.deactivate')}</DropdownMenuItem>}
-                        {user.status === 'PENDING' ? <DropdownMenuItem className="text-destructive" onSelect={() => updateUser(user, { status: 'ARCHIVED' })}><CircleX />{t('accessControl.reject')}</DropdownMenuItem> : null}
+                        {user.status !== 'ACTIVE' ? <DropdownMenuItem onSelect={() => updateUser(user, { status: 'ACTIVE' })}><RotateCcw />{user.status === 'PENDING' || user.status === 'PENDING_APPROVAL' ? t('accessControl.approve') : t('accessControl.activate')}</DropdownMenuItem> : <DropdownMenuItem className="text-destructive" onSelect={() => updateUser(user, { status: 'SUSPENDED' })}><Ban />{t('accessControl.deactivate')}</DropdownMenuItem>}
+                        {user.status === 'PENDING' || user.status === 'PENDING_APPROVAL' ? <DropdownMenuItem className="text-destructive" onSelect={() => updateUser(user, { status: 'ARCHIVED' })}><CircleX />{t('accessControl.reject')}</DropdownMenuItem> : null}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>

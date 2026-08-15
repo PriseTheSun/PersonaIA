@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/ui/badge';
 
 const variants = {
-  ACTIVE: 'success', PENDING: 'warning', INVITED: 'warning', SUSPENDED: 'destructive', ARCHIVED: 'secondary',
+  ACTIVE: 'success', PENDING: 'warning', PENDING_APPROVAL: 'warning', INVITED: 'warning', SUSPENDED: 'destructive', REMOVED: 'secondary', ARCHIVED: 'secondary',
 } as const;
 
 export function StatusBadge({ status }: { status: keyof typeof variants }) {

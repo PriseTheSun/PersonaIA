@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createTenantFormSchema, createUserFormSchema, moveUserFormSchema, strongPassword } from './form-schemas';
+import { createProjectFormSchema, createTenantFormSchema, functionalPermissionInputSchema, createUserFormSchema, moveUserFormSchema, strongPassword } from './form-schemas';
 
 describe('mutation form schemas', () => {
   it('enforces the backend password policy', () => {
@@ -8,7 +8,7 @@ describe('mutation form schemas', () => {
   });
 
   it('rejects unsafe tenant slugs', () => {
-    const result = createTenantFormSchema.safeParse({ name: 'Acme', slug: '../acme', adminName: 'Admin User', adminEmail: 'admin@acme.test', adminPassword: 'Secure!Pass123' });
+    const result = createTenantFormSchema.safeParse({ name: 'Acme', slug: '../acme', segment: 'Research', adminName: 'Admin User', adminEmail: 'admin@acme.test', adminPassword: 'Secure!Pass123' });
     expect(result.success).toBe(false);
   });
 
@@ -19,5 +19,14 @@ describe('mutation form schemas', () => {
 
   it('accepts project membership presets for a new user', () => {
     expect(createUserFormSchema.safeParse({ name: 'Project User', email: 'user@example.com', password: 'Secure!Pass123', projectIds: [], permission: 'CONTRIBUTOR' }).success).toBe(true);
+  });
+
+  it('requires every new project to belong to one workspace', () => {
+    expect(createProjectFormSchema.safeParse({ name: 'Project without workspace', description: '' }).success).toBe(false);
+    expect(createProjectFormSchema.safeParse({ workspaceId: 'workspace-1', name: 'Project A', description: '' }).success).toBe(true);
+  });
+
+  it('accepts explicit functional denial as a first-class permission', () => {
+    expect(functionalPermissionInputSchema.safeParse({ feature: 'PERSONA', level: 'WRITE', effect: 'DENY' }).success).toBe(true);
   });
 });

@@ -4,6 +4,7 @@ const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined)?.repla
 let accessToken: string | null = null;
 let refreshPromise: Promise<string> | null = null;
 let unauthorizedHandler: (() => void) | null = null;
+let scopeContext: { tenantId?: string; workspaceId?: string } = {};
 
 export class ApiError extends Error {
   constructor(
@@ -26,6 +27,10 @@ export function setAccessToken(token: string | null) {
 
 export function setUnauthorizedHandler(handler: (() => void) | null) {
   unauthorizedHandler = handler;
+}
+
+export function setScopeContext(context: { tenantId?: string; workspaceId?: string }) {
+  scopeContext = context;
 }
 
 function isJsonResponse(response: Response) {
@@ -64,6 +69,8 @@ async function fetchApi(path: string, options: RequestOptions, hasRetried = fals
       Accept: 'application/json',
       ...(options.body === undefined ? {} : { 'Content-Type': 'application/json' }),
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      ...(scopeContext.tenantId ? { 'X-Tenant-Id': scopeContext.tenantId } : {}),
+      ...(scopeContext.workspaceId ? { 'X-Workspace-Id': scopeContext.workspaceId } : {}),
       ...options.headers,
     },
     body: options.body === undefined ? undefined : JSON.stringify(options.body),

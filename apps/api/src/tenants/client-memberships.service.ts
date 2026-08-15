@@ -1,0 +1,154 @@
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ClientRole, MembershipStatus, Prisma, RecordStatus, Role, WorkspaceRole,
+} from '@prisma/client';
+import { AccessControlService } from '../common/access-control.service';
+import { Principal } from '../common/types/principal';
+import { normalizeEmail } from '../common/security';
+import { NotificationsService } from '../notifications/notifications.service';
+import { PrismaService } from '../prisma/prisma.service';
+import { AddClientMembershipInput, UpdateClientMembershipInput } from './tenants.schemas';
+
+@Injectable()
+export class ClientMembershipsService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly access: AccessControlService,
+    private readonly notifications: NotificationsService,
+  ) {}
+
+  async list(tenantId: string, actor: Principal) {
+    await this.access.requireTenant(actor, tenantId);
+    const tenantAdmin = this.access.isSuper(actor) || (await this.prisma.clientMembership.count({
+      where: { tenantId, userId: actor.id, role: ClientRole.CLIENT_ADMIN, status: MembershipStatus.ACTIVE },
+    })) > 0;
+    if (!tenantAdmin) {
+      const workspaceAdmin = await this.prisma.workspaceMembership.count({
+        where: {
+          tenantId, userId: actor.id, role: WorkspaceRole.WORKSPACE_ADMIN, status: MembershipStatus.ACTIVE,
+          clientMembership: { status: MembershipStatus.ACTIVE }, workspace: { status: RecordStatus.ACTIVE },
+        },
+      });
+      if (!workspaceAdmin) throw new NotFoundException('Cliente não encontrado.');
+    }
+    return this.prisma.clientMembership.findMany({
+      where: { tenantId, status: tenantAdmin ? { not: MembershipStatus.REMOVED } : MembershipStatus.ACTIVE },
+      select: {
+        id: true, tenantId: true, userId: true, role: true, status: true, createdAt: true, updatedAt: true,
+        user: { select: { id: true, name: true, email: true, status: true, lastLoginAt: true } },
+        _count: { select: { workspaceMemberships: { where: { status: MembershipStatus.ACTIVE } } } },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  async add(tenantId: string, input: AddClientMembershipInput, actor: Principal) {
+    await this.access.requireTenant(actor, tenantId, true);
+    const user = input.userId
+      ? await this.prisma.user.findUnique({ where: { id: input.userId } })
+      : await this.prisma.user.findUnique({ where: { email: normalizeEmail(input.email!) } });
+    if (!user || user.status === RecordStatus.REMOVED) throw new NotFoundException('Usuário não encontrado.');
+    return this.prisma.$transaction(async (tx) => {
+      const membership = await tx.clientMembership.upsert({
+        where: { tenantId_userId: { tenantId, userId: user.id } },
+        update: { role: input.role, status: input.status },
+        create: { tenantId, userId: user.id, role: input.role, status: input.status },
+      });
+      if (input.status === MembershipStatus.ACTIVE) await this.activateIdentity(tx, user.id, tenantId, input.role);
+      if (input.role === ClientRole.CLIENT_ADMIN && input.status === MembershipStatus.ACTIVE) {
+        await this.ensureWorkspaceAdminEverywhere(tx, tenantId, user.id);
+      }
+      await tx.auditLog.create({
+        data: {
+          actorId: actor.id, tenantId, action: 'CLIENT_MEMBERSHIP_ADDED', targetType: 'ClientMembership', targetId: membership.id,
+          scopeType: 'TENANT', scopeId: tenantId, metadata: { userId: user.id, role: input.role, status: input.status },
+        },
+      });
+      return membership;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
+  async update(tenantId: string, userId: string, input: UpdateClientMembershipInput, actor: Principal) {
+    await this.access.requireTenant(actor, tenantId, true);
+    const existing = await this.prisma.clientMembership.findUnique({
+      where: { tenantId_userId: { tenantId, userId } },
+    });
+    if (!existing || existing.status === MembershipStatus.REMOVED) throw new NotFoundException('Vínculo não encontrado.');
+    const removesAdmin = existing.role === ClientRole.CLIENT_ADMIN && existing.status === MembershipStatus.ACTIVE
+      && (input.role === ClientRole.CLIENT_MEMBER || (input.status && input.status !== MembershipStatus.ACTIVE));
+    const nextRole = input.role ?? existing.role;
+    const nextStatus = input.status ?? existing.status;
+    return this.prisma.$transaction(async (tx) => {
+      await this.access.lockTenant(tx, tenantId);
+      if (removesAdmin) {
+        const activeAdmins = await tx.clientMembership.count({
+          where: { tenantId, role: ClientRole.CLIENT_ADMIN, status: MembershipStatus.ACTIVE },
+        });
+        if (activeAdmins <= 1) throw new ConflictException('Mantenha pelo menos um CLIENT_ADMIN ativo.');
+      }
+      const membership = await tx.clientMembership.update({
+        where: { id: existing.id },
+        data: { ...(input.role ? { role: input.role } : {}), ...(input.status ? { status: input.status } : {}) },
+      });
+      if (nextStatus === MembershipStatus.ACTIVE) {
+        await this.activateIdentity(tx, userId, tenantId, nextRole);
+      } else if (existing.status === MembershipStatus.ACTIVE) {
+        await tx.workspaceMembership.updateMany({
+          where: { tenantId, userId, status: MembershipStatus.ACTIVE },
+          data: { status: nextStatus === MembershipStatus.REMOVED ? MembershipStatus.REMOVED : MembershipStatus.SUSPENDED },
+        });
+      }
+      if (nextRole === ClientRole.CLIENT_ADMIN && nextStatus === MembershipStatus.ACTIVE) {
+        await this.ensureWorkspaceAdminEverywhere(tx, tenantId, userId);
+      }
+      const resolved = existing.status === MembershipStatus.PENDING_APPROVAL
+        && (nextStatus === MembershipStatus.ACTIVE || nextStatus === MembershipStatus.REMOVED);
+      if (resolved) await this.notifications.resolveAccessRequest(tx, userId, tenantId);
+      await tx.auditLog.create({
+        data: {
+          actorId: actor.id, tenantId,
+          action: resolved ? nextStatus === MembershipStatus.ACTIVE ? 'USER_ACCESS_APPROVED' : 'USER_ACCESS_REJECTED' : 'CLIENT_MEMBERSHIP_UPDATED',
+          targetType: 'ClientMembership', targetId: membership.id, scopeType: 'TENANT', scopeId: tenantId,
+          metadata: { userId, previous: { role: existing.role, status: existing.status }, next: { role: nextRole, status: nextStatus } },
+        },
+      });
+      return membership;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
+  remove(tenantId: string, userId: string, actor: Principal) {
+    return this.update(tenantId, userId, { status: MembershipStatus.REMOVED }, actor);
+  }
+
+  private async activateIdentity(tx: Prisma.TransactionClient, userId: string, tenantId: string, role: ClientRole) {
+    const user = await tx.user.findUniqueOrThrow({ where: { id: userId } });
+    if (user.status === RecordStatus.ACTIVE) return;
+    if (!new Set<RecordStatus>([RecordStatus.PENDING, RecordStatus.PENDING_APPROVAL, RecordStatus.INVITED]).has(user.status)) {
+      throw new ConflictException('A identidade global está inativa e exige reativação explícita pelo superadministrador.');
+    }
+    await tx.user.update({
+      where: { id: userId },
+      data: {
+        status: RecordStatus.ACTIVE,
+        ...(user.role !== Role.SUPER_ADMIN && !user.tenantId ? {
+          tenantId,
+          role: role === ClientRole.CLIENT_ADMIN ? Role.CLIENT_ADMIN : Role.PROJECT_USER,
+        } : {}),
+      },
+    });
+  }
+
+  private async ensureWorkspaceAdminEverywhere(tx: Prisma.TransactionClient, tenantId: string, userId: string) {
+    const workspaces = await tx.workspace.findMany({ where: { tenantId, status: RecordStatus.ACTIVE }, select: { id: true } });
+    for (const workspace of workspaces) {
+      await tx.workspaceMembership.upsert({
+        where: { workspaceId_userId: { workspaceId: workspace.id, userId } },
+        update: { role: WorkspaceRole.WORKSPACE_ADMIN, status: MembershipStatus.ACTIVE },
+        create: {
+          tenantId, workspaceId: workspace.id, userId,
+          role: WorkspaceRole.WORKSPACE_ADMIN, status: MembershipStatus.ACTIVE,
+        },
+      });
+    }
+  }
+}

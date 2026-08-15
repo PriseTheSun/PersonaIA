@@ -1,23 +1,24 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Put, Query } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
-import { TenantScoped } from '../common/decorators/tenant-scoped.decorator';
 import { Principal } from '../common/types/principal';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import {
   addMemberSchema, AddMemberInput, createProjectSchema, CreateProjectInput, moveMemberSchema, MoveMemberInput,
+  projectQuerySchema, ProjectQuery, replaceProjectPermissionsSchema, ReplaceProjectPermissionsInput,
   updatePermissionSchema, UpdatePermissionInput, updateProjectSchema, UpdateProjectInput
 } from './projects.schemas';
 import { ProjectsService } from './projects.service';
 
-@Roles('CLIENT_ADMIN')
-@TenantScoped()
+@Roles('SUPER_ADMIN', 'CLIENT_ADMIN', 'WORKSPACE_ADMIN', 'WORKSPACE_MEMBER', 'PROJECT_USER')
 @Controller('projects')
 export class ProjectsController {
   constructor(private readonly projects: ProjectsService) {}
 
   @Get()
-  list(@CurrentUser() actor: Principal) { return this.projects.list(actor); }
+  list(@CurrentUser() actor: Principal, @Query(new ZodValidationPipe(projectQuerySchema)) query: ProjectQuery) {
+    return this.projects.list(actor, query);
+  }
 
   @Get(':id')
   get(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: Principal) { return this.projects.get(id, actor); }
@@ -30,6 +31,11 @@ export class ProjectsController {
   @Patch(':id')
   update(@Param('id', ParseUUIDPipe) id: string, @Body(new ZodValidationPipe(updateProjectSchema)) input: UpdateProjectInput, @CurrentUser() actor: Principal) {
     return this.projects.update(id, input, actor);
+  }
+
+  @Delete(':id')
+  removeProject(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: Principal) {
+    return this.projects.remove(id, actor);
   }
 
   @Get(':id/members')
@@ -52,6 +58,21 @@ export class ProjectsController {
     @Body(new ZodValidationPipe(updatePermissionSchema)) input: UpdatePermissionInput,
     @CurrentUser() actor: Principal
   ) { return this.projects.updatePermission(id, userId, input, actor); }
+
+  @Get(':id/members/:userId/permissions')
+  functionalPermissions(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @CurrentUser() actor: Principal,
+  ) { return this.projects.getFunctionalPermissions(id, userId, actor); }
+
+  @Put(':id/members/:userId/permissions')
+  replaceFunctionalPermissions(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('userId', ParseUUIDPipe) userId: string,
+    @Body(new ZodValidationPipe(replaceProjectPermissionsSchema)) input: ReplaceProjectPermissionsInput,
+    @CurrentUser() actor: Principal,
+  ) { return this.projects.replaceFunctionalPermissions(id, userId, input, actor); }
 
   @Delete(':id/members/:userId')
   removeMember(@Param('id', ParseUUIDPipe) id: string, @Param('userId', ParseUUIDPipe) userId: string, @CurrentUser() actor: Principal) {

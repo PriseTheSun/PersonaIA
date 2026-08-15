@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, RecordStatus, Role } from '@prisma/client';
+import { ClientRole, MembershipStatus, Prisma, RecordStatus, Role } from '@prisma/client';
 import { Principal } from '../common/types/principal';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -18,20 +18,26 @@ export class NotificationsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async dispatchAccessRequest(tx: Prisma.TransactionClient, request: AccessRequestContext) {
-    const recipients = await tx.user.findMany({
-      where: {
-        status: RecordStatus.ACTIVE,
-        OR: [
-          { role: Role.SUPER_ADMIN },
-          { role: Role.CLIENT_ADMIN, tenantId: request.tenantId },
-        ],
-      },
-      select: { id: true },
-    });
-    if (recipients.length === 0) return;
+    const [superAdmins, clientAdmins] = await Promise.all([
+      tx.user.findMany({
+        where: { status: RecordStatus.ACTIVE, role: Role.SUPER_ADMIN },
+        select: { id: true },
+      }),
+      tx.clientMembership.findMany({
+        where: {
+          tenantId: request.tenantId,
+          role: ClientRole.CLIENT_ADMIN,
+          status: MembershipStatus.ACTIVE,
+          user: { status: RecordStatus.ACTIVE },
+        },
+        select: { userId: true },
+      }),
+    ]);
+    const recipientIds = [...new Set([...superAdmins.map(({ id }) => id), ...clientAdmins.map(({ userId }) => userId)])];
+    if (recipientIds.length === 0) return;
 
     await tx.notification.createMany({
-      data: recipients.map(({ id: recipientId }) => ({
+      data: recipientIds.map((recipientId) => ({
         recipientId,
         tenantId: request.tenantId,
         type: ACCESS_REQUESTED_NOTIFICATION,
@@ -46,10 +52,10 @@ export class NotificationsService {
     });
   }
 
-  async resolveAccessRequest(tx: Prisma.TransactionClient, targetId: string) {
+  async resolveAccessRequest(tx: Prisma.TransactionClient, targetId: string, tenantId: string) {
     const now = new Date();
     await tx.notification.updateMany({
-      where: { type: ACCESS_REQUESTED_NOTIFICATION, targetId, resolvedAt: null },
+      where: { type: ACCESS_REQUESTED_NOTIFICATION, targetId, tenantId, resolvedAt: null },
       data: { resolvedAt: now, readAt: now },
     });
   }

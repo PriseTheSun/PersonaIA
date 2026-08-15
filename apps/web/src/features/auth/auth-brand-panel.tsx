@@ -12,6 +12,8 @@ const slides = [
   { image: '/images/auth/project-governance.jpg', titleKey: 'authCarousel.governanceTitle', descriptionKey: 'authCarousel.governanceDescription' },
 ] as const;
 
+const SLIDE_DURATION_MS = 6500;
+
 export function AuthBrandPanel() {
   const { t } = useTranslation();
   const [activeSlide, setActiveSlide] = useState(0);
@@ -29,11 +31,12 @@ export function AuthBrandPanel() {
 
   useEffect(() => {
     if (manuallyPaused || interactionPaused || reducedMotion) return undefined;
-    const timeout = window.setTimeout(() => setActiveSlide((current) => (current + 1) % slides.length), 6500);
+    const timeout = window.setTimeout(() => setActiveSlide((current) => (current + 1) % slides.length), SLIDE_DURATION_MS);
     return () => window.clearTimeout(timeout);
   }, [activeSlide, interactionPaused, manuallyPaused, reducedMotion]);
 
   const active = slides[activeSlide];
+  const isPaused = manuallyPaused || interactionPaused;
 
   return (
     <aside
@@ -70,24 +73,38 @@ export function AuthBrandPanel() {
           </div>
         </div>
 
-        <div className="absolute inset-x-0 bottom-3 flex items-center justify-center gap-1" role="group" aria-label={t('authCarousel.controls')}>
+        <div className="absolute inset-x-0 bottom-3 flex items-center justify-center" role="group" aria-label={t('authCarousel.controls')}>
           {!reducedMotion ? (
-            <button type="button" className="grid size-11 place-items-center rounded-md text-secondary-foreground/80 transition-colors hover:bg-secondary-foreground/10 hover:text-secondary-foreground" aria-label={t(manuallyPaused ? 'authCarousel.play' : 'authCarousel.pause')} onClick={() => setManuallyPaused((paused) => !paused)}>
+            <button type="button" className="mr-1 grid size-11 place-items-center rounded-md text-secondary-foreground/80 transition-colors hover:bg-secondary-foreground/10 hover:text-secondary-foreground" aria-label={t(manuallyPaused ? 'authCarousel.play' : 'authCarousel.pause')} onClick={() => setManuallyPaused((paused) => !paused)}>
               {manuallyPaused ? <Play className="size-4" fill="currentColor" aria-hidden="true" /> : <Pause className="size-4" fill="currentColor" aria-hidden="true" />}
             </button>
           ) : null}
-          {slides.map((slide, index) => (
-            <button
-              type="button"
-              key={slide.image}
-              className="grid size-11 place-items-center rounded-md"
-              aria-label={t('authCarousel.goToSlide', { number: index + 1, title: t(slide.titleKey) })}
-              aria-current={index === activeSlide ? 'true' : undefined}
-              onClick={() => setActiveSlide(index)}
-            >
-              <span className={cn('h-1.5 rounded-full bg-secondary-foreground/45 transition-[width,background-color] duration-200', index === activeSlide ? 'w-7 bg-secondary-foreground' : 'w-2')} aria-hidden="true" />
-            </button>
-          ))}
+          <div className="flex items-center gap-1">
+            {slides.map((slide, index) => {
+              const isActive = index === activeSlide;
+
+              return (
+                <button
+                  type="button"
+                  key={slide.image}
+                  className="grid h-11 w-5 place-items-center rounded-md"
+                  aria-label={t('authCarousel.goToSlide', { number: index + 1, title: t(slide.titleKey) })}
+                  aria-current={isActive ? 'true' : undefined}
+                  onClick={() => setActiveSlide(index)}
+                >
+                  <span className={cn('relative block h-1.5 overflow-hidden rounded-full bg-secondary-foreground/45 transition-[width,background-color] duration-200', isActive ? 'w-7 bg-secondary-foreground/30' : 'w-2')} aria-hidden="true">
+                    {isActive ? (
+                      <span
+                        key={activeSlide}
+                        className="auth-carousel-progress absolute inset-0 rounded-full bg-secondary-foreground"
+                        style={{ animationDuration: `${SLIDE_DURATION_MS}ms`, animationPlayState: isPaused ? 'paused' : 'running' }}
+                      />
+                    ) : null}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
     </aside>

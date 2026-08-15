@@ -1,0 +1,84 @@
+{
+  "baseUrl": "http://localhost:3001/api/v1",
+  "origin": "http://localhost:5173",
+  "loginIntervalMs": 12500,
+  "credentials": {
+    "superAdmin": { "email": "qa-super@example.test", "password": "REPLACE_ME" },
+    "clientAdminA": { "email": "qa-admin-a@example.test", "password": "REPLACE_ME" },
+    "clientAdminA2": { "email": "qa-admin-a2@example.test", "password": "REPLACE_ME" },
+    "clientAdminB": { "email": "qa-admin-b@example.test", "password": "REPLACE_ME" },
+    "workspaceMemberA": { "email": "qa-member-a@example.test", "password": "REPLACE_ME" },
+    "revocableMemberA": { "email": "qa-revocable-a@example.test", "password": "REPLACE_ME" },
+    "denyMemberA": { "email": "qa-deny-a@example.test", "password": "REPLACE_ME" },
+    "multiClientUser": { "email": "qa-multi@example.test", "password": "REPLACE_ME" },
+    "existingIdentityNotInB": {
+      "email": "qa-existing@example.test",
+      "password": "REPLACE_ME",
+      "wrongPassword": "WrongPass-For-QA-9!"
+    },
+    "suspendedIdentity": {
+      "id": "00000000-0000-4000-8000-0000000006a1",
+      "email": "qa-suspended@example.test",
+      "name": "QA Suspended Identity",
+      "password": "REPLACE_ME"
+    },
+    "suspendedMembershipIdentity": {
+      "id": "00000000-0000-4000-8000-0000000006a2",
+      "email": "qa-suspended-membership@example.test"
+    },
+    "crossTenantGrantMember": {
+      "id": "00000000-0000-4000-8000-0000000006a3",
+      "email": "qa-cross-grant@example.test",
+      "password": "REPLACE_ME"
+    },
+    "pendingApproval": { "email": "qa-pending@example.test", "password": "REPLACE_ME" }
+  },
+  "tenantSlugs": {
+    "tenantA": "qa-tenant-a",
+    "tenantB": "qa-tenant-b"
+  },
+  "ids": {
+    "tenantA": "00000000-0000-4000-8000-00000000000a",
+    "tenantB": "00000000-0000-4000-8000-00000000000b",
+    "workspaceA1": "00000000-0000-4000-8000-0000000000a1",
+    "workspaceA2": "00000000-0000-4000-8000-0000000000a2",
+    "workspaceB1": "00000000-0000-4000-8000-0000000000b1",
+    "projectA1": "00000000-0000-4000-8000-0000000001a1",
+    "projectA2": "00000000-0000-4000-8000-0000000001a2",
+    "projectB1": "00000000-0000-4000-8000-0000000001b1",
+    "personaA": "00000000-0000-4000-8000-0000000002a1",
+    "personaB": "00000000-0000-4000-8000-0000000002b1",
+    "questionnaireA": "00000000-0000-4000-8000-0000000003a1",
+    "questionnaireB": "00000000-0000-4000-8000-0000000003b1",
+    "revocableMemberA": "00000000-0000-4000-8000-0000000004a1",
+    "workspaceMemberA": "00000000-0000-4000-8000-0000000004a2"
+  },
+  "sentinels": {
+    "tenantA": "QA_SENTINEL_TENANT_A",
+    "tenantB": "QA_SENTINEL_TENANT_B"
+  },
+  "probes": {
+    "denyPersona": {
+      "method": "POST",
+      "path": "/projects/PROJECT_A1/assets/PERSONA/PERSONA_A/usage",
+      "body": {}
+    },
+    "inheritedPersona": {
+      "method": "POST",
+      "path": "/projects/PROJECT_A2/assets/PERSONA/PERSONA_A/usage",
+      "body": {}
+    }
+  },
+  "disposableAdminRace": {
+    "tenantId": "00000000-0000-4000-8000-00000000005a",
+    "clientAdminUserIds": [
+      "00000000-0000-4000-8000-0000000005a1",
+      "00000000-0000-4000-8000-0000000005a2"
+    ],
+    "workspaceId": "00000000-0000-4000-8000-00000000005b",
+    "workspaceAdminUserIds": [
+      "00000000-0000-4000-8000-0000000005b1",
+      "00000000-0000-4000-8000-0000000005b2"
+    ]
+  }
+}

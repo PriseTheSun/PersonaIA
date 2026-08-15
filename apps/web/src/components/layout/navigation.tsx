@@ -1,54 +1,64 @@
-import { FolderKanban, Gauge, KeyRound, ShieldCheck, Users, Building2, UserRoundCog } from 'lucide-react';
+import { ClipboardList, FolderKanban, Gauge, KeyRound, PanelsTopLeft, ScanFace, ShieldCheck, Users, Building2, UserRoundCog } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { NavLink, useLocation } from 'react-router-dom';
 import type { Role } from '@/lib/schemas';
 import { SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from '@/components/ui/sidebar';
 
-const items = [
-  { to: '/', label: 'nav.overview', icon: Gauge, roles: ['SUPER_ADMIN', 'CLIENT_ADMIN', 'PROJECT_USER'] },
+type NavigationItem = { to: string; label: string; icon: typeof Gauge; roles: Role[] };
+
+const platformItems = [
+  { to: '/', label: 'nav.overview', icon: Gauge, roles: ['SUPER_ADMIN', 'CLIENT_ADMIN', 'WORKSPACE_ADMIN', 'WORKSPACE_MEMBER', 'PROJECT_USER'] },
   { to: '/access-control', label: 'nav.accessControl', icon: UserRoundCog, roles: ['SUPER_ADMIN', 'CLIENT_ADMIN'] },
   { to: '/tenants', label: 'nav.tenants', icon: Building2, roles: ['SUPER_ADMIN'] },
   { to: '/administrators', label: 'nav.admins', icon: ShieldCheck, roles: ['SUPER_ADMIN'] },
-  { to: '/projects', label: 'nav.projects', icon: FolderKanban, roles: ['CLIENT_ADMIN'] },
-  { to: '/users', label: 'nav.users', icon: Users, roles: ['CLIENT_ADMIN'] },
-  { to: '/permissions', label: 'nav.permissions', icon: KeyRound, roles: ['CLIENT_ADMIN'] },
-] satisfies Array<{ to: string; label: string; icon: typeof Gauge; roles: Role[] }>;
+] satisfies NavigationItem[];
 
-export function Navigation({ role, onNavigate }: { role: Role; onNavigate?: () => void }) {
+const workspaceItems = [
+  { to: '/workspaces', label: 'nav.workspaces', icon: PanelsTopLeft, roles: ['SUPER_ADMIN', 'CLIENT_ADMIN', 'WORKSPACE_ADMIN', 'WORKSPACE_MEMBER', 'PROJECT_USER'] },
+  { to: '/projects', label: 'nav.projects', icon: FolderKanban, roles: ['SUPER_ADMIN', 'CLIENT_ADMIN', 'WORKSPACE_ADMIN', 'WORKSPACE_MEMBER', 'PROJECT_USER'] },
+  { to: '/users', label: 'nav.users', icon: Users, roles: ['SUPER_ADMIN', 'CLIENT_ADMIN', 'WORKSPACE_ADMIN'] },
+  { to: '/permissions', label: 'nav.permissions', icon: KeyRound, roles: ['SUPER_ADMIN', 'CLIENT_ADMIN', 'WORKSPACE_ADMIN'] },
+  { to: '/personas', label: 'nav.personas', icon: ScanFace, roles: ['SUPER_ADMIN', 'CLIENT_ADMIN', 'WORKSPACE_ADMIN', 'WORKSPACE_MEMBER', 'PROJECT_USER'] },
+  { to: '/questionnaires', label: 'nav.questionnaires', icon: ClipboardList, roles: ['SUPER_ADMIN', 'CLIENT_ADMIN', 'WORKSPACE_ADMIN', 'WORKSPACE_MEMBER', 'PROJECT_USER'] },
+] satisfies NavigationItem[];
+
+function NavigationGroup({ label, items, role, onNavigate }: { label: string; items: NavigationItem[]; role: Role; onNavigate?: () => void }) {
   const { t } = useTranslation();
   const location = useLocation();
   const { isMobile, setOpenMobile } = useSidebar();
+  const visibleItems = items.filter((item) => (item.roles as Role[]).includes(role));
+  if (visibleItems.length === 0) return null;
+  return (
+    <SidebarGroup>
+      <SidebarGroupLabel>{t(label)}</SidebarGroupLabel>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          {visibleItems.map(({ to, label: itemLabel, icon: Icon }) => {
+            const isActive = to === '/' ? location.pathname === '/' : location.pathname === to || location.pathname.startsWith(`${to}/`);
+            return (
+              <SidebarMenuItem key={to}>
+                <SidebarMenuButton asChild isActive={isActive} tooltip={t(itemLabel)}>
+                  <NavLink to={to} end={to === '/'} onClick={() => { onNavigate?.(); if (isMobile) setOpenMobile(false); }} aria-label={t(itemLabel)}>
+                    <Icon aria-hidden="true" />
+                    <span>{t(itemLabel)}</span>
+                  </NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            );
+          })}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
+  );
+}
+
+export function Navigation({ role, onNavigate }: { role: Role; onNavigate?: () => void }) {
+  const { t } = useTranslation();
 
   return (
     <nav aria-label={t('common.menu')}>
-      <SidebarGroup>
-        <SidebarGroupLabel>{t('nav.platform')}</SidebarGroupLabel>
-        <SidebarGroupContent>
-          <SidebarMenu>
-            {items.filter((item) => (item.roles as Role[]).includes(role)).map(({ to, label, icon: Icon }) => {
-              const isActive = to === '/' ? location.pathname === '/' : location.pathname === to || location.pathname.startsWith(`${to}/`);
-              return (
-                <SidebarMenuItem key={to}>
-                  <SidebarMenuButton asChild isActive={isActive} tooltip={t(label)}>
-                    <NavLink
-                      to={to}
-                      end={to === '/'}
-                      onClick={() => {
-                        onNavigate?.();
-                        if (isMobile) setOpenMobile(false);
-                      }}
-                      aria-label={t(label)}
-                    >
-                      <Icon aria-hidden="true" />
-                      <span>{t(label)}</span>
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              );
-            })}
-          </SidebarMenu>
-        </SidebarGroupContent>
-      </SidebarGroup>
+      <NavigationGroup label="nav.platform" items={platformItems} role={role} onNavigate={onNavigate} />
+      <NavigationGroup label="nav.organization" items={workspaceItems} role={role} onNavigate={onNavigate} />
     </nav>
   );
 }

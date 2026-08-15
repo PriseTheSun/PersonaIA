@@ -35,9 +35,9 @@ export class AccessTokenGuard implements CanActivate {
       if (payload.type !== 'access') throw new Error('wrong token type');
       const user = await this.prisma.user.findFirst({
         where: { id: payload.sub, status: RecordStatus.ACTIVE },
-        select: { id: true, tenantId: true, email: true, name: true, role: true, tokenVersion: true, tenant: { select: { status: true } } }
+        select: { id: true, tenantId: true, email: true, name: true, role: true, tokenVersion: true }
       });
-      if (!user || user.tokenVersion !== payload.ver || (user.tenant && user.tenant.status !== RecordStatus.ACTIVE)) {
+      if (!user || user.tokenVersion !== payload.ver) {
         throw new Error('invalid user state');
       }
       const principal: Principal = { id: user.id, tenantId: user.tenantId, email: user.email, name: user.name, role: user.role, tokenVersion: user.tokenVersion };

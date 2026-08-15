@@ -7,17 +7,59 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// role/tenantId are compatibility hints. Scoped memberships are authoritative.
 enum Role {
   SUPER_ADMIN
   CLIENT_ADMIN
+  WORKSPACE_ADMIN
+  WORKSPACE_MEMBER
   PROJECT_USER
 }
 
 enum RecordStatus {
   PENDING
+  PENDING_APPROVAL
+  INVITED
   ACTIVE
   SUSPENDED
   ARCHIVED
+  REMOVED
+}
+
+enum MembershipStatus {
+  PENDING_APPROVAL
+  INVITED
+  ACTIVE
+  SUSPENDED
+  REMOVED
+}
+
+enum ClientRole {
+  CLIENT_ADMIN
+  CLIENT_MEMBER
+}
+
+enum WorkspaceRole {
+  WORKSPACE_ADMIN
+  WORKSPACE_MEMBER
+}
+
+enum Feature {
+  PERSONA
+  RESEARCH
+  SIMULATION
+  DASHBOARD
+}
+
+enum PermissionLevel {
+  READ
+  WRITE
+  ADMIN
+}
+
+enum PermissionEffect {
+  ALLOW
+  DENY
 }
 
 enum ProjectPermission {
@@ -27,74 +69,330 @@ enum ProjectPermission {
   VIEWER
 }
 
+enum AssetType {
+  PERSONA
+  QUESTIONNAIRE
+}
+
+enum AssociationAction {
+  ASSOCIATED
+  DISASSOCIATED
+}
+
 model Tenant {
-  id        String       @id @default(uuid()) @db.Uuid
-  name      String       @db.VarChar(120)
-  slug      String       @unique @db.VarChar(80)
-  status    RecordStatus @default(ACTIVE)
-  users     User[]
-  projects  Project[]
-  auditLogs AuditLog[]
-  notifications Notification[]
-  createdAt DateTime     @default(now())
-  updatedAt DateTime     @updatedAt
+  id                        String                        @id @default(uuid()) @db.Uuid
+  name                      String                        @db.VarChar(120)
+  slug                      String                        @unique @db.VarChar(80)
+  segment                   String?                       @db.VarChar(120)
+  description               String?                       @db.VarChar(1000)
+  status                    RecordStatus                  @default(ACTIVE)
+  legacyUsers               User[]
+  clientMemberships         ClientMembership[]
+  workspaces                Workspace[]
+  projects                  Project[]
+  personas                  Persona[]
+  questionnaires            Questionnaire[]
+  workspacePermissions      WorkspacePermission[]
+  projectPermissions        ProjectFunctionalPermission[]
+  workspacePersonas         WorkspacePersona[]
+  workspaceQuestionnaires   WorkspaceQuestionnaire[]
+  associationHistory        AssetAssociationHistory[]
+  projectPersonaUsage       ProjectPersonaUsage[]
+  projectQuestionnaireUsage ProjectQuestionnaireUsage[]
+  auditLogs                 AuditLog[]
+  notifications             Notification[]
+  createdAt                 DateTime                      @default(now())
+  updatedAt                 DateTime                      @updatedAt
 
   @@index([status])
 }
 
 model User {
-  id              String              @id @default(uuid()) @db.Uuid
-  tenantId        String?             @db.Uuid
-  tenant          Tenant?             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  email           String              @unique @db.VarChar(254)
-  name            String              @db.VarChar(120)
-  passwordHash    String              @db.VarChar(255)
-  role            Role
-  status          RecordStatus        @default(ACTIVE)
-  tokenVersion    Int                 @default(0)
-  lastLoginAt     DateTime?
-  memberships     ProjectMembership[]
-  refreshSessions RefreshSession[]
-  auditLogs       AuditLog[]          @relation("AuditActor")
-  notifications   Notification[]      @relation("NotificationRecipient")
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
+  id                   String                        @id @default(uuid()) @db.Uuid
+  tenantId             String?                       @db.Uuid
+  tenant               Tenant?                       @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  email                String                        @unique @db.VarChar(254)
+  name                 String                        @db.VarChar(120)
+  passwordHash         String                        @db.VarChar(255)
+  role                 Role                          @default(PROJECT_USER)
+  status               RecordStatus                  @default(ACTIVE)
+  tokenVersion         Int                           @default(0)
+  lastLoginAt          DateTime?
+  clientMemberships    ClientMembership[]
+  workspaceMemberships WorkspaceMembership[]
+  workspacePermissions WorkspacePermission[]
+  projectPermissions   ProjectFunctionalPermission[]
+  memberships          ProjectMembership[]
+  refreshSessions      RefreshSession[]
+  auditLogs            AuditLog[]                    @relation("AuditActor")
+  associationHistory   AssetAssociationHistory[]     @relation("AssociationActor")
+  notifications        Notification[]                @relation("NotificationRecipient")
+  createdAt            DateTime                      @default(now())
+  updatedAt            DateTime                      @updatedAt
 
-  @@unique([id, tenantId])
   @@index([tenantId, role, status])
 }
 
-model Project {
-  id          String              @id @default(uuid()) @db.Uuid
-  tenantId    String              @db.Uuid
-  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  name        String              @db.VarChar(120)
-  slug        String              @db.VarChar(80)
-  description String?             @db.VarChar(500)
-  status      RecordStatus        @default(ACTIVE)
-  memberships ProjectMembership[]
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
+model ClientMembership {
+  id                   String                @id @default(uuid()) @db.Uuid
+  tenantId             String                @db.Uuid
+  userId               String                @db.Uuid
+  role                 ClientRole            @default(CLIENT_MEMBER)
+  status               MembershipStatus      @default(INVITED)
+  tenant               Tenant                @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user                 User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  workspaceMemberships WorkspaceMembership[] @relation("ClientWorkspaceMembership")
+  projectMemberships   ProjectMembership[]   @relation("ClientProjectMembership")
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  @@unique([tenantId, userId])
+  @@unique([id, tenantId])
+  @@index([userId, status])
+  @@index([tenantId, role, status])
+}
+
+model Workspace {
+  id                        String                        @id @default(uuid()) @db.Uuid
+  tenantId                  String                        @db.Uuid
+  tenant                    Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  name                      String                        @db.VarChar(120)
+  slug                      String                        @db.VarChar(80)
+  description               String?                       @db.VarChar(1000)
+  status                    RecordStatus                  @default(ACTIVE)
+  isDefault                 Boolean                       @default(false)
+  projects                  Project[]
+  memberships               WorkspaceMembership[]
+  permissions               WorkspacePermission[]
+  projectPermissions        ProjectFunctionalPermission[]
+  personas                  WorkspacePersona[]
+  questionnaires            WorkspaceQuestionnaire[]
+  associationHistory        AssetAssociationHistory[]
+  projectPersonaUsage       ProjectPersonaUsage[]
+  projectQuestionnaireUsage ProjectQuestionnaireUsage[]
+  createdAt                 DateTime                      @default(now())
+  updatedAt                 DateTime                      @updatedAt
 
   @@unique([tenantId, slug])
   @@unique([id, tenantId])
   @@index([tenantId, status])
 }
 
+model WorkspaceMembership {
+  id                   String                        @id @default(uuid()) @db.Uuid
+  tenantId             String                        @db.Uuid
+  workspaceId          String                        @db.Uuid
+  userId               String                        @db.Uuid
+  role                 WorkspaceRole                 @default(WORKSPACE_MEMBER)
+  status               MembershipStatus              @default(INVITED)
+  workspace            Workspace                     @relation(fields: [workspaceId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  user                 User                          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  clientMembership     ClientMembership              @relation("ClientWorkspaceMembership", fields: [tenantId, userId], references: [tenantId, userId], onDelete: Restrict)
+  workspacePermissions WorkspacePermission[]         @relation("WorkspaceMemberPermissions")
+  projectPermissions   ProjectFunctionalPermission[] @relation("WorkspaceMemberProjectPermissions")
+  createdAt            DateTime                      @default(now())
+  updatedAt            DateTime                      @updatedAt
+
+  @@unique([workspaceId, userId])
+  @@unique([id, tenantId, workspaceId])
+  @@index([tenantId, userId, status])
+  @@index([workspaceId, role, status])
+}
+
+model WorkspacePermission {
+  id          String              @id @default(uuid()) @db.Uuid
+  tenantId    String              @db.Uuid
+  workspaceId String              @db.Uuid
+  userId      String              @db.Uuid
+  feature     Feature
+  level       PermissionLevel
+  effect      PermissionEffect    @default(ALLOW)
+  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  workspace   Workspace           @relation(fields: [workspaceId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  user        User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  membership  WorkspaceMembership @relation("WorkspaceMemberPermissions", fields: [workspaceId, userId], references: [workspaceId, userId], onDelete: Cascade)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@unique([workspaceId, userId, feature])
+  @@index([tenantId, userId])
+}
+
+model Project {
+  id                 String                        @id @default(uuid()) @db.Uuid
+  tenantId           String                        @db.Uuid
+  workspaceId        String                        @db.Uuid
+  tenant             Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  workspace          Workspace                     @relation(fields: [workspaceId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  name               String                        @db.VarChar(120)
+  slug               String                        @db.VarChar(80)
+  description        String?                       @db.VarChar(500)
+  status             RecordStatus                  @default(ACTIVE)
+  memberships        ProjectMembership[]
+  permissions        ProjectFunctionalPermission[]
+  personaUsage       ProjectPersonaUsage[]
+  questionnaireUsage ProjectQuestionnaireUsage[]
+  createdAt          DateTime                      @default(now())
+  updatedAt          DateTime                      @updatedAt
+
+  @@unique([workspaceId, slug])
+  @@unique([id, tenantId])
+  @@unique([id, tenantId, workspaceId])
+  @@index([tenantId, workspaceId, status])
+}
+
+// Deprecated coarse preset retained for current UI compatibility.
 model ProjectMembership {
-  id         String            @id @default(uuid()) @db.Uuid
-  tenantId   String            @db.Uuid
-  projectId  String            @db.Uuid
-  userId     String            @db.Uuid
-  permission ProjectPermission @default(VIEWER)
-  project    Project           @relation(fields: [projectId, tenantId], references: [id, tenantId], onDelete: Cascade)
-  user       User              @relation(fields: [userId, tenantId], references: [id, tenantId], onDelete: Cascade)
-  createdAt  DateTime          @default(now())
-  updatedAt  DateTime          @updatedAt
+  id               String            @id @default(uuid()) @db.Uuid
+  tenantId         String            @db.Uuid
+  projectId        String            @db.Uuid
+  userId           String            @db.Uuid
+  permission       ProjectPermission @default(VIEWER)
+  project          Project           @relation(fields: [projectId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientMembership ClientMembership  @relation("ClientProjectMembership", fields: [tenantId, userId], references: [tenantId, userId], onDelete: Cascade)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
 
   @@unique([projectId, userId])
   @@index([tenantId, userId])
   @@index([tenantId, projectId])
+}
+
+model ProjectFunctionalPermission {
+  id          String              @id @default(uuid()) @db.Uuid
+  tenantId    String              @db.Uuid
+  workspaceId String              @db.Uuid
+  projectId   String              @db.Uuid
+  userId      String              @db.Uuid
+  feature     Feature
+  level       PermissionLevel
+  effect      PermissionEffect    @default(ALLOW)
+  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  workspace   Workspace           @relation(fields: [workspaceId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  project     Project             @relation(fields: [projectId, tenantId, workspaceId], references: [id, tenantId, workspaceId], onDelete: Cascade)
+  user        User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  membership  WorkspaceMembership @relation("WorkspaceMemberProjectPermissions", fields: [workspaceId, userId], references: [workspaceId, userId], onDelete: Cascade)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@unique([projectId, userId, feature])
+  @@index([tenantId, workspaceId, userId])
+}
+
+model Persona {
+  id          String             @id @default(uuid()) @db.Uuid
+  tenantId    String             @db.Uuid
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  name        String             @db.VarChar(120)
+  description String?            @db.VarChar(1000)
+  data        Json
+  version     Int                @default(1)
+  status      RecordStatus       @default(ACTIVE)
+  workspaces  WorkspacePersona[]
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  @@unique([id, tenantId])
+  @@index([tenantId, status])
+}
+
+model Questionnaire {
+  id          String                   @id @default(uuid()) @db.Uuid
+  tenantId    String                   @db.Uuid
+  tenant      Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  name        String                   @db.VarChar(120)
+  description String?                  @db.VarChar(1000)
+  data        Json
+  version     Int                      @default(1)
+  status      RecordStatus             @default(ACTIVE)
+  workspaces  WorkspaceQuestionnaire[]
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+
+  @@unique([id, tenantId])
+  @@index([tenantId, status])
+}
+
+model WorkspacePersona {
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @db.Uuid
+  workspaceId     String    @db.Uuid
+  personaId       String    @db.Uuid
+  associatedAt    DateTime  @default(now())
+  disassociatedAt DateTime?
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  workspace       Workspace @relation(fields: [workspaceId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  persona         Persona   @relation(fields: [personaId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([workspaceId, personaId])
+  @@index([tenantId, personaId, disassociatedAt])
+}
+
+model WorkspaceQuestionnaire {
+  id              String        @id @default(uuid()) @db.Uuid
+  tenantId        String        @db.Uuid
+  workspaceId     String        @db.Uuid
+  questionnaireId String        @db.Uuid
+  associatedAt    DateTime      @default(now())
+  disassociatedAt DateTime?
+  tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  workspace       Workspace     @relation(fields: [workspaceId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  questionnaire   Questionnaire @relation(fields: [questionnaireId, tenantId], references: [id, tenantId], onDelete: Restrict)
+
+  @@unique([workspaceId, questionnaireId])
+  @@index([tenantId, questionnaireId, disassociatedAt])
+}
+
+model AssetAssociationHistory {
+  id          String            @id @default(uuid()) @db.Uuid
+  tenantId    String            @db.Uuid
+  workspaceId String            @db.Uuid
+  assetType   AssetType
+  assetId     String            @db.Uuid
+  action      AssociationAction
+  actorId     String?           @db.Uuid
+  metadata    Json?
+  tenant      Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  workspace   Workspace         @relation(fields: [workspaceId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  actor       User?             @relation("AssociationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  createdAt   DateTime          @default(now())
+
+  @@index([tenantId, workspaceId, assetType, assetId, createdAt])
+}
+
+model ProjectPersonaUsage {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @db.Uuid
+  workspaceId String    @db.Uuid
+  projectId   String    @db.Uuid
+  personaId   String    @db.Uuid
+  snapshot    Json
+  version     Int
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  workspace   Workspace @relation(fields: [workspaceId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  project     Project   @relation(fields: [projectId, tenantId, workspaceId], references: [id, tenantId, workspaceId], onDelete: Restrict)
+  createdAt   DateTime  @default(now())
+
+  @@index([tenantId, personaId])
+  @@index([projectId, createdAt])
+}
+
+model ProjectQuestionnaireUsage {
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @db.Uuid
+  workspaceId     String    @db.Uuid
+  projectId       String    @db.Uuid
+  questionnaireId String    @db.Uuid
+  snapshot        Json
+  version         Int
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  workspace       Workspace @relation(fields: [workspaceId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  project         Project   @relation(fields: [projectId, tenantId, workspaceId], references: [id, tenantId, workspaceId], onDelete: Restrict)
+  createdAt       DateTime  @default(now())
+
+  @@index([tenantId, questionnaireId])
+  @@index([projectId, createdAt])
 }
 
 model RefreshSession {
@@ -123,11 +421,14 @@ model AuditLog {
   action     String   @db.VarChar(100)
   targetType String   @db.VarChar(80)
   targetId   String?  @db.Uuid
+  scopeType  String?  @db.VarChar(40)
+  scopeId    String?  @db.Uuid
   metadata   Json?
   createdAt  DateTime @default(now())
 
   @@index([tenantId, createdAt])
   @@index([actorId, createdAt])
+  @@index([scopeType, scopeId, createdAt])
 }
 
 model Notification {
@@ -143,7 +444,7 @@ model Notification {
   resolvedAt  DateTime?
   createdAt   DateTime  @default(now())
 
-  @@unique([recipientId, type, targetId])
+  @@unique([recipientId, tenantId, type, targetId])
   @@index([recipientId, readAt, createdAt])
   @@index([tenantId, type, createdAt])
 }

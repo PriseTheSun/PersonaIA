@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { Prisma, RecordStatus, Role } from '@prisma/client';
+import { ClientRole, MembershipStatus, Prisma, RecordStatus, Role } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
@@ -30,29 +30,66 @@ export class AuthService {
     });
     if (!tenant) throw new BadRequestException({ code: 'INVALID_TENANT', message: 'Código da organização inválido.' });
 
-    const passwordHash = await argon2.hash(input.password, {
-      type: argon2.argon2id, memoryCost: 65_536, timeCost: 3, parallelism: 1
-    });
     const userName = input.name.trim();
     const userEmail = normalizeEmail(input.email);
+    const existingIdentity = await this.prisma.user.findUnique({
+      where: { email: userEmail },
+      select: { id: true, passwordHash: true },
+    });
+    if (existingIdentity) {
+      const ownsIdentity = await argon2.verify(existingIdentity.passwordHash, input.password).catch(() => false);
+      if (!ownsIdentity) return { status: 'PENDING' as const };
+    }
+    const passwordHash = existingIdentity?.passwordHash ?? await argon2.hash(input.password, {
+      type: argon2.argon2id, memoryCost: 65_536, timeCost: 3, parallelism: 1
+    });
     try {
       await this.prisma.$transaction(async (tx) => {
-        const user = await tx.user.create({
-          data: {
-            tenantId: tenant.id,
-            name: userName,
-            email: userEmail,
-            passwordHash,
-            role: Role.PROJECT_USER,
-            status: RecordStatus.PENDING
-          }
+        let user = await tx.user.findUnique({ where: { email: userEmail } });
+        if (user) {
+          const ownsIdentity = await argon2.verify(user.passwordHash, input.password).catch(() => false);
+          if (!ownsIdentity) return;
+        } else {
+          user = await tx.user.create({
+            data: {
+              tenantId: tenant.id,
+              name: userName,
+              email: userEmail,
+              passwordHash,
+              role: Role.PROJECT_USER,
+              status: RecordStatus.PENDING_APPROVAL,
+            },
+          });
+        }
+        const existingMembership = await tx.clientMembership.findUnique({
+          where: { tenantId_userId: { tenantId: tenant.id, userId: user.id } },
         });
+        if (!existingMembership) {
+          await tx.clientMembership.create({
+            data: {
+              tenantId: tenant.id,
+              userId: user.id,
+              role: ClientRole.CLIENT_MEMBER,
+              status: MembershipStatus.PENDING_APPROVAL,
+            },
+          });
+        } else if (existingMembership.status === MembershipStatus.REMOVED) {
+          await tx.clientMembership.update({
+            where: { id: existingMembership.id },
+            data: { status: MembershipStatus.PENDING_APPROVAL },
+          });
+        } else {
+          return;
+        }
         await tx.auditLog.create({
           data: {
             tenantId: tenant.id,
+            actorId: user.id,
             action: 'USER_REGISTERED',
             targetType: 'User',
             targetId: user.id,
+            scopeType: 'TENANT',
+            scopeId: tenant.id,
             metadata: { source: 'SELF_REGISTRATION' }
           }
         });
@@ -72,21 +109,37 @@ export class AuthService {
   }
 
   async login(input: LoginInput, context: SessionContext) {
-    const user = await this.prisma.user.findUnique({ where: { email: normalizeEmail(input.email) }, include: { tenant: true } });
+    const user = await this.prisma.user.findUnique({
+      where: { email: normalizeEmail(input.email) },
+      include: {
+        clientMemberships: {
+          where: { status: MembershipStatus.ACTIVE, tenant: { status: RecordStatus.ACTIVE } },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+    });
     const hash = user?.passwordHash ?? await this.dummyHash;
     const matches = await argon2.verify(hash, input.password).catch(() => false);
     if (!user || !matches) {
       throw new UnauthorizedException('E-mail ou senha inválidos.');
     }
-    if (user.status === RecordStatus.PENDING) {
+    if (user.status === RecordStatus.PENDING || user.status === RecordStatus.PENDING_APPROVAL) {
       throw new ForbiddenException({ code: 'ACCOUNT_PENDING', message: 'Cadastro aguardando aprovação.' });
     }
-    if (user.status !== RecordStatus.ACTIVE || (user.tenant && user.tenant.status !== RecordStatus.ACTIVE)) {
+    if (user.status !== RecordStatus.ACTIVE || (user.role !== Role.SUPER_ADMIN && user.clientMemberships.length === 0)) {
       throw new ForbiddenException({ code: 'ACCOUNT_INACTIVE', message: 'Conta inativa.' });
     }
-    await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
-    const tokens = await this.issueSession(user, context, input.rememberMe === true);
-    return { ...tokens, user: redactUser(user) };
+    const selectedMembership = user.clientMemberships.find((item) => item.tenantId === user.tenantId) ?? user.clientMemberships[0];
+    const compatibilityRole = user.role === Role.SUPER_ADMIN
+      ? Role.SUPER_ADMIN
+      : selectedMembership?.role === ClientRole.CLIENT_ADMIN ? Role.CLIENT_ADMIN : Role.PROJECT_USER;
+    const selectedTenantId = user.role === Role.SUPER_ADMIN ? null : selectedMembership?.tenantId ?? null;
+    const currentUser = await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date(), tenantId: selectedTenantId, role: compatibilityRole },
+    });
+    const tokens = await this.issueSession(currentUser, context, input.rememberMe === true);
+    return { ...tokens, user: redactUser(currentUser) };
   }
 
   async refresh(rawToken: string, context: SessionContext) {
@@ -102,7 +155,13 @@ export class AuthService {
     }
     const session = await this.prisma.refreshSession.findUnique({
       where: { tokenHash: hashToken(rawToken) },
-      include: { user: { include: { tenant: true } } }
+      include: {
+        user: {
+          include: {
+            clientMemberships: { where: { status: MembershipStatus.ACTIVE, tenant: { status: RecordStatus.ACTIVE } } },
+          },
+        },
+      }
     });
     if (!session || session.id !== payload.sid || session.familyId !== payload.fid || session.userId !== payload.sub) {
       throw new UnauthorizedException('Sessão inválida ou expirada.');
@@ -112,7 +171,7 @@ export class AuthService {
       await this.revokeFamily(session.familyId, user.id);
       throw new UnauthorizedException('Reutilização de sessão detectada. Faça login novamente.');
     }
-    if (user.status !== RecordStatus.ACTIVE || (user.tenant && user.tenant.status !== RecordStatus.ACTIVE)) {
+    if (user.status !== RecordStatus.ACTIVE || (user.role !== Role.SUPER_ADMIN && user.clientMemberships.length === 0)) {
       await this.revokeFamily(session.familyId, user.id);
       throw new UnauthorizedException('Conta inativa.');
     }

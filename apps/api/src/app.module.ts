@@ -16,6 +16,8 @@ import { PrismaModule } from './prisma/prisma.module';
 import { ProjectsModule } from './projects/projects.module';
 import { TenantsModule } from './tenants/tenants.module';
 import { UsersModule } from './users/users.module';
+import { WorkspacesModule } from './workspaces/workspaces.module';
+import { AssetsModule } from './assets/assets.module';
 
 @Module({
   imports: [
@@ -31,7 +33,9 @@ import { UsersModule } from './users/users.module';
     DashboardModule,
     TenantsModule,
     ProjectsModule,
-    UsersModule
+    UsersModule,
+    WorkspacesModule,
+    AssetsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: OriginGuard },

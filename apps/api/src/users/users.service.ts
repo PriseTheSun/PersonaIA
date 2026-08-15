@@ -115,7 +115,7 @@ export class UsersService {
           data: { revokedAt: new Date() }
         });
       }
-      if (resolvesAccessRequest) await this.notifications.resolveAccessRequest(tx, id);
+      if (resolvesAccessRequest && existing.tenantId) await this.notifications.resolveAccessRequest(tx, id, existing.tenantId);
       await tx.auditLog.create({
         data: {
           tenantId: nextTenantId,

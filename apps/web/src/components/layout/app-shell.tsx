@@ -6,6 +6,7 @@ import { ThemeSelector } from '@/components/shared/theme-selector';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarInset, SidebarProvider, SidebarRail, SidebarTrigger } from '@/components/ui/sidebar';
 import { useAuth } from '@/features/auth/auth-store';
 import { AccountMenu } from './account-menu';
+import { ContextSwitcher } from './context-switcher';
 import { Navigation } from './navigation';
 import { NotificationsMenu } from './notifications-menu';
 
@@ -19,8 +20,9 @@ export function AppShell() {
         <SidebarHeader className="border-b border-sidebar-border">
           <span className="group-data-[collapsible=icon]:hidden"><AppLogo /></span>
           <span className="hidden group-data-[collapsible=icon]:block"><AppLogo compact /></span>
+          <ContextSwitcher />
         </SidebarHeader>
-        <SidebarContent><Navigation role={auth.user.role} /></SidebarContent>
+        <SidebarContent><Navigation role={auth.effectiveRole ?? auth.user.role} /></SidebarContent>
         <SidebarFooter className="border-t border-sidebar-border"><AccountMenu /></SidebarFooter>
         <SidebarRail label={t('common.collapseSidebar')} />
       </Sidebar>
@@ -29,7 +31,7 @@ export function AppShell() {
           <div className="flex min-w-0 items-center gap-2">
             <SidebarTrigger label={t('common.openMenu')} />
             <span className="lg:hidden"><AppLogo compact /></span>
-            <p className="hidden truncate text-sm text-muted-foreground lg:block">{t(`roles.${auth.user.role}`)}</p>
+            <p className="hidden truncate text-sm text-muted-foreground lg:block">{t(`roles.${auth.effectiveRole ?? auth.user.role}`)}</p>
           </div>
           <div className="ml-auto flex items-center gap-0.5"><LanguageSelector /><ThemeSelector /><NotificationsMenu /></div>
         </header>

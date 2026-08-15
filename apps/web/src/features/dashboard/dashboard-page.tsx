@@ -23,7 +23,7 @@ export function DashboardPage() {
     [range],
   );
   const isSuperAdmin = auth.status === 'authenticated' && auth.user.role === 'SUPER_ADMIN';
-  const isProjectUser = auth.status === 'authenticated' && auth.user.role === 'PROJECT_USER';
+  const isProjectUser = auth.status === 'authenticated' && ['PROJECT_USER', 'WORKSPACE_MEMBER'].includes(auth.effectiveRole ?? auth.user.role);
   const rangeLabel = t(`dashboard.ranges.${range}`);
   const summary = query.status === 'success' ? query.data : null;
 

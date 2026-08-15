@@ -1,6 +1,6 @@
 # PersonaIA
 
-Base multi-tenant para administrar clientes, projetos, usuários e presets iniciais de permissão para uma plataforma de criação de personas genéricas destinadas a pesquisas.
+Plataforma multi-tenant para administrar clientes, workspaces, projetos, identidades, permissões funcionais, personas e questionários destinados a pesquisas.
 
 ## Stack
 
@@ -9,14 +9,17 @@ Base multi-tenant para administrar clientes, projetos, usuários e presets inici
 - Ambiente: Docker Compose, imagens multi-stage e Nginx.
 - Qualidade: Jest, Vitest, testes black-box e plano de QA para isolamento, acessibilidade, responsividade e i18n.
 
-## Modelo de acesso inicial
+## Modelo de acesso
 
-- `SUPER_ADMIN`: global, sem tenant; cria tenants e Client Admins.
-- `CLIENT_ADMIN`: pertence a exatamente um tenant; administra projetos, usuários e vínculos apenas desse tenant.
-- `PROJECT_USER`: usuário não administrativo associado a um ou mais projetos do próprio tenant.
-- `VIEWER`, `CONTRIBUTOR`, `MANAGER` e `OWNER`: presets temporários por vínculo de projeto. A matriz fina de permissões será definida na próxima etapa.
+- `SUPER_ADMIN`: autoridade global da plataforma.
+- `CLIENT_ADMIN`: papel no vínculo entre uma identidade e um cliente.
+- `WORKSPACE_ADMIN` e `WORKSPACE_MEMBER`: papéis independentes em cada workspace.
+- `PERSONA`, `RESEARCH`, `SIMULATION` e `DASHBOARD`: funcionalidades controladas por `READ`, `WRITE` ou `ADMIN`.
+- Permissões padrão do workspace são herdadas pelos projetos; override de projeto substitui a herança e `DENY` explícito sempre prevalece.
 
-O `tenantId` efetivo vem exclusivamente da identidade autenticada. IDs ou campos enviados pelo navegador nunca ampliam o escopo. Vínculos entre projeto e usuário também são protegidos por chaves estrangeiras compostas no PostgreSQL.
+Uma identidade pode estar vinculada a vários clientes e workspaces sem duplicação. O cliente/workspace informado pelo navegador é somente um seletor: o backend recarrega vínculos e permissões ativos em cada requisição. FKs compostas no PostgreSQL impedem associações cross-tenant; projetos não podem mudar de workspace; auditoria, histórico de associações e snapshots são append-only.
+
+Personas e questionários existem uma vez no cliente e são associados a vários workspaces por referência. Projetos que utilizam esses ativos preservam um snapshot histórico independente.
 
 ## Executar com Docker
 
@@ -72,9 +75,10 @@ npm run build
 npm test
 npm run lint
 npm audit --omit=dev
+node --test qa/spec-blackbox.test.mjs
 ```
 
-O roteiro completo está em [qa/TEST_PLAN.md](./qa/TEST_PLAN.md). Os requisitos e gates de segurança ficam em [docs/SECURITY.md](./docs/SECURITY.md), e a análise STRIDE em [docs/THREAT_MODEL.md](./docs/THREAT_MODEL.md).
+O roteiro completo está em [qa/TEST_PLAN.md](./qa/TEST_PLAN.md), e a rastreabilidade dos 12 critérios de aceite em [qa/SPEC_ACCEPTANCE_MATRIX.md](./qa/SPEC_ACCEPTANCE_MATRIX.md). Os requisitos e gates de segurança ficam em [docs/SECURITY.md](./docs/SECURITY.md), e a análise STRIDE em [docs/THREAT_MODEL.md](./docs/THREAT_MODEL.md).
 
 ## Segurança antes de produção
 
