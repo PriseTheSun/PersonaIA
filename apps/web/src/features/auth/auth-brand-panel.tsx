@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 
-export function LoginBrandPanel() {
+export function AuthBrandPanel() {
   const { t } = useTranslation();
 
   return (

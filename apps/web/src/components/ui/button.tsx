@@ -14,7 +14,7 @@ const buttonVariants = cva(
         outline: 'border bg-card hover:bg-muted active:bg-muted/80',
         secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
         ghost: 'hover:bg-muted active:bg-muted/80',
-        link: 'min-h-0 px-0 text-primary underline-offset-4 hover:underline',
+        link: 'min-h-0 px-0 text-[oklch(var(--link))] underline-offset-4 hover:underline',
       },
       size: {
         default: 'h-10', sm: 'h-9 min-h-9 rounded-md px-3', lg: 'h-11 min-h-11 px-5', icon: 'size-10 min-h-10 px-0',

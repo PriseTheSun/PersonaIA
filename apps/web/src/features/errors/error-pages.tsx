@@ -21,7 +21,7 @@ function ErrorPage({ code, icon, title, description }: { code: string; icon: Rea
   return (
     <section className="mx-auto flex min-h-[60vh] max-w-lg flex-col items-center justify-center text-center">
       <span className="grid size-12 place-items-center rounded-full bg-muted text-muted-foreground [&>svg]:size-5" aria-hidden="true">{icon}</span>
-      <p className="mt-4 text-sm font-medium text-primary">{code}</p><h1 className="mt-2 text-2xl font-semibold tracking-[-0.025em]">{title}</h1><p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
+      <p className="mt-4 text-sm font-medium text-[oklch(var(--link))]">{code}</p><h1 className="mt-2 text-2xl font-semibold tracking-[-0.025em]">{title}</h1><p className="mt-2 text-sm leading-6 text-muted-foreground">{description}</p>
       <Button asChild className="mt-6"><Link to="/"><ArrowLeft />{t('common.backHome')}</Link></Button>
     </section>
   );

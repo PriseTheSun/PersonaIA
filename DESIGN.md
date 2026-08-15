@@ -89,6 +89,7 @@ A estratégia segue a proporção 60/30/10: cinzas claros e branco dominam a com
 
 - **Azul Elétrico** (`#4361EE` / `oklch(0.5558 0.2141 269.02)`): ações primárias, seleção atual, foco e links relevantes.
 - **Azul Elétrico Profundo** (`#3651D4` / `oklch(0.4990 0.2028 268.71)`): estado hover/active da cor primária.
+- **Azul de Link no Escuro** (`#667DF5` / `oklch(0.6322 0.1800 272.13)`): variante exclusiva para texto pequeno no dark mode, preservando contraste AA.
 
 ### Secondary
 
