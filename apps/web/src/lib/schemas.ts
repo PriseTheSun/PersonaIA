@@ -44,12 +44,27 @@ export const projectMemberSchema = z.object({
 });
 export type ProjectMember = z.infer<typeof projectMemberSchema>;
 
+export const dashboardRangeSchema = z.enum(['7d', '30d', '12m', '5y']);
+export type DashboardRange = z.infer<typeof dashboardRangeSchema>;
+
 export const dashboardSummarySchema = z.object({
-  tenants: z.number().int().nonnegative().optional(),
-  clientAdmins: z.number().int().nonnegative().optional(),
-  projects: z.number().int().nonnegative().optional(),
-  users: z.number().int().nonnegative().optional(),
-  activePersonas: z.number().int().nonnegative().optional(),
+  scope: roleSchema,
+  range: dashboardRangeSchema,
+  bucket: z.enum(['day', 'month', 'year']),
+  from: z.string().datetime(),
+  to: z.string().datetime(),
+  metrics: z.object({
+    projectsCreated: z.number().int().nonnegative(),
+    personasCreated: z.number().int().nonnegative(),
+    activeUsers: z.number().int().nonnegative(),
+    pendingAccessRequests: z.number().int().nonnegative(),
+    accessibleProjects: z.number().int().nonnegative().optional(),
+  }),
+  series: z.array(z.object({
+    periodStart: z.string().datetime(),
+    projectsCreated: z.number().int().nonnegative(),
+    personasCreated: z.number().int().nonnegative(),
+  })),
   recentActivity: z.array(z.object({
     id: z.string(),
     label: z.string(),

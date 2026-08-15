@@ -35,6 +35,7 @@ model Tenant {
   users     User[]
   projects  Project[]
   auditLogs AuditLog[]
+  notifications Notification[]
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
 
@@ -55,6 +56,7 @@ model User {
   memberships     ProjectMembership[]
   refreshSessions RefreshSession[]
   auditLogs       AuditLog[]          @relation("AuditActor")
+  notifications   Notification[]      @relation("NotificationRecipient")
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
 
@@ -126,4 +128,22 @@ model AuditLog {
 
   @@index([tenantId, createdAt])
   @@index([actorId, createdAt])
+}
+
+model Notification {
+  id          String    @id @default(uuid()) @db.Uuid
+  recipientId String    @db.Uuid
+  recipient   User      @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  tenantId    String?   @db.Uuid
+  tenant      Tenant?   @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  type        String    @db.VarChar(80)
+  targetId    String    @db.Uuid
+  payload     Json
+  readAt      DateTime?
+  resolvedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@unique([recipientId, type, targetId])
+  @@index([recipientId, readAt, createdAt])
+  @@index([tenantId, type, createdAt])
 }

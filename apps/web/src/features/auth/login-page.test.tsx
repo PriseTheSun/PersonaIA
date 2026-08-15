@@ -71,4 +71,16 @@ describe('LoginPage', () => {
     await user.click(within(carousel).getByRole('button', { name: 'Pausar apresentação' }));
     expect(within(carousel).getByRole('button', { name: 'Continuar apresentação' })).toBeInTheDocument();
   });
+
+  it('disables automatic carousel motion when reduced motion is requested', async () => {
+    const matchMedia = vi.spyOn(window, 'matchMedia').mockImplementation((query: string) => ({
+      matches: query === '(prefers-reduced-motion: reduce)', media: query, onchange: null,
+      addListener: vi.fn(), removeListener: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn(), dispatchEvent: vi.fn(),
+    }));
+    renderLogin();
+
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Pausar apresentação' })).not.toBeInTheDocument());
+    expect(screen.getByText('Entenda o que as pessoas realmente dizem')).toBeInTheDocument();
+    matchMedia.mockRestore();
+  });
 });

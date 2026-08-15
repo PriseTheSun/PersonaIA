@@ -1,21 +1,12 @@
 import { PanelLeft, PanelLeftClose } from 'lucide-react';
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type CSSProperties, type HTMLAttributes, type PropsWithChildren } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties, type HTMLAttributes, type PropsWithChildren } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
+import { SidebarContext, useSidebar } from '@/components/ui/sidebar-context';
 import { cn } from '@/lib/utils';
 
 const STORAGE_KEY = 'personaia.sidebar.open.v1';
 const DESKTOP_QUERY = '(min-width: 1024px)';
-
-type SidebarContextValue = {
-  open: boolean;
-  openMobile: boolean;
-  isDesktop: boolean;
-  setOpenMobile: (open: boolean) => void;
-  toggleSidebar: () => void;
-};
-
-const SidebarContext = createContext<SidebarContextValue | null>(null);
 
 function getInitialOpen() {
   if (typeof window === 'undefined') return true;
@@ -73,12 +64,6 @@ export function SidebarProvider({ children, className }: PropsWithChildren<{ cla
   } as CSSProperties;
 
   return <SidebarContext.Provider value={value}><div className={cn('min-h-screen w-full bg-background', className)} style={style}>{children}</div></SidebarContext.Provider>;
-}
-
-function useSidebar() {
-  const context = useContext(SidebarContext);
-  if (!context) throw new Error('useSidebar must be used inside SidebarProvider');
-  return context;
 }
 
 export function Sidebar({ children, className, mobileTitle, mobileDescription }: PropsWithChildren<{ className?: string; mobileTitle: string; mobileDescription: string }>) {

@@ -5,6 +5,7 @@ import { Prisma, RecordStatus, Role } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { hashToken, normalizeEmail, redactUser } from '../common/security';
 import { LoginInput, RegisterInput } from './auth.schemas';
 
@@ -15,25 +16,32 @@ interface RefreshPayload { sub: string; sid: string; fid: string; type: 'refresh
 export class AuthService {
   private readonly dummyHash = argon2.hash('Dummy-password-value-1!', { type: argon2.argon2id });
 
-  constructor(private readonly prisma: PrismaService, private readonly jwt: JwtService, private readonly config: ConfigService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly jwt: JwtService,
+    private readonly config: ConfigService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   async register(input: RegisterInput) {
     const tenant = await this.prisma.tenant.findFirst({
       where: { slug: input.tenantSlug, status: RecordStatus.ACTIVE },
-      select: { id: true }
+      select: { id: true, name: true }
     });
     if (!tenant) throw new BadRequestException({ code: 'INVALID_TENANT', message: 'Código da organização inválido.' });
 
     const passwordHash = await argon2.hash(input.password, {
       type: argon2.argon2id, memoryCost: 65_536, timeCost: 3, parallelism: 1
     });
+    const userName = input.name.trim();
+    const userEmail = normalizeEmail(input.email);
     try {
       await this.prisma.$transaction(async (tx) => {
         const user = await tx.user.create({
           data: {
             tenantId: tenant.id,
-            name: input.name.trim(),
-            email: normalizeEmail(input.email),
+            name: userName,
+            email: userEmail,
             passwordHash,
             role: Role.PROJECT_USER,
             status: RecordStatus.PENDING
@@ -47,6 +55,13 @@ export class AuthService {
             targetId: user.id,
             metadata: { source: 'SELF_REGISTRATION' }
           }
+        });
+        await this.notifications.dispatchAccessRequest(tx, {
+          userId: user.id,
+          userName,
+          userEmail,
+          tenantId: tenant.id,
+          tenantName: tenant.name,
         });
       });
     } catch (error) {

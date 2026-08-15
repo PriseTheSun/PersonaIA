@@ -170,6 +170,10 @@ O sistema é plano por padrão. Profundidade vem de camadas tonais e divisores; 
 
 Sidebar branca no tema claro e Azul Escuro no tema escuro; navegação compacta e acionável por drawer em larguras pequenas. O estado ativo combina Azul de Seleção, peso e foco elétrico. O contexto atual de tenant e projeto permanece identificável.
 
+### Authentication Carousel
+
+O painel institucional de login e cadastro usa três fotografias editoriais relacionadas a pesquisa, construção de personas e tomada de decisão. A imagem entra em fade de 700 ms e o texto em fade-in-up de 600 ms. A troca automática ocorre após 6,5 segundos, oferece navegação e pausa manuais e permanece estática quando `prefers-reduced-motion` estiver ativo. Em telas abaixo de 1024 px, o painel é removido para priorizar o formulário.
+
 ## 6. Do's and Don'ts
 
 ### Do:

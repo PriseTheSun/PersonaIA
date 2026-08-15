@@ -28,9 +28,9 @@ export function AppLogo({ compact = false, className }: { compact?: boolean; cla
   return (
     <span className={cn('inline-flex shrink-0 items-center', className)} role="img" aria-label="PersonaIA">
       {compact ? (
-        <span className="block size-8 bg-primary" style={compactLogoMaskStyle} aria-hidden="true" />
+        <span className="block size-8 bg-[#0c1825] dark:bg-white" style={compactLogoMaskStyle} aria-hidden="true" />
       ) : (
-        <span className="block h-12 w-[190px] bg-primary" style={logoMaskStyle} aria-hidden="true" />
+        <span className="block h-12 w-[190px] bg-[#0c1825] dark:bg-white" style={logoMaskStyle} aria-hidden="true" />
       )}
     </span>
   );

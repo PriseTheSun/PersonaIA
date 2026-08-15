@@ -3,12 +3,13 @@ import { Prisma, ProjectPermission, RecordStatus, Role } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { normalizeEmail, redactUser } from '../common/security';
 import { Principal } from '../common/types/principal';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProjectUserInput, UpdateProjectUserInput, UpdateUserAccessInput } from './users.schemas';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly notifications: NotificationsService) {}
 
   async list(actor: Principal) {
     const tenantId = this.tenantId(actor);
@@ -90,6 +91,11 @@ export class UsersService {
 
     const accessChanged = nextRole !== existing.role || nextStatus !== existing.status || nextTenantId !== existing.tenantId;
     const removeMemberships = existing.tenantId !== nextTenantId || nextRole !== Role.PROJECT_USER;
+    const resolvesAccessRequest = existing.status === RecordStatus.PENDING
+      && (nextStatus === RecordStatus.ACTIVE || nextStatus === RecordStatus.ARCHIVED);
+    const auditAction = resolvesAccessRequest
+      ? nextStatus === RecordStatus.ACTIVE ? 'USER_ACCESS_APPROVED' : 'USER_ACCESS_REJECTED'
+      : 'USER_ACCESS_UPDATED';
     const updated = await this.prisma.$transaction(async (tx) => {
       const membershipsRemoved = removeMemberships
         ? (await tx.projectMembership.deleteMany({ where: { userId: id } })).count
@@ -109,11 +115,12 @@ export class UsersService {
           data: { revokedAt: new Date() }
         });
       }
+      if (resolvesAccessRequest) await this.notifications.resolveAccessRequest(tx, id);
       await tx.auditLog.create({
         data: {
           tenantId: nextTenantId,
           actorId: actor.id,
-          action: 'USER_ACCESS_UPDATED',
+          action: auditAction,
           targetType: 'User',
           targetId: id,
           metadata: {

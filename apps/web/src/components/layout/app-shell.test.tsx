@@ -92,6 +92,9 @@ describe('AppShell', () => {
     expect(sidebar).toHaveAttribute('data-state', 'collapsed');
     await waitFor(() => expect(localStorage.getItem('personaia.sidebar.open.v1')).toBe('false'));
 
+    await user.hover(within(sidebar as HTMLElement).getByRole('link', { name: 'Visão geral' }));
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Visão geral');
+
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', ctrlKey: true }));
     await waitFor(() => expect(sidebar).toHaveAttribute('data-state', 'expanded'));
   });

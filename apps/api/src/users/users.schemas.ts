@@ -16,7 +16,7 @@ export const updateProjectUserSchema = z.object({
 }).strict().refine((value) => Object.keys(value).length > 0, 'Informe ao menos um campo.');
 
 export const updateUserAccessSchema = z.object({
-  status: z.enum(['ACTIVE', 'SUSPENDED']).optional(),
+  status: z.enum(['ACTIVE', 'SUSPENDED', 'ARCHIVED']).optional(),
   role: z.enum(['SUPER_ADMIN', 'CLIENT_ADMIN', 'PROJECT_USER']).optional(),
   tenantId: z.string().uuid().nullable().optional()
 }).strict().refine((value) => Object.keys(value).length > 0, 'Informe ao menos um campo.');

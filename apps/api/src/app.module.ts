@@ -11,6 +11,7 @@ import { TenantScopeGuard } from './common/guards/tenant-scope.guard';
 import { validateEnvironment } from './config/env';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { HealthModule } from './health/health.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProjectsModule } from './projects/projects.module';
 import { TenantsModule } from './tenants/tenants.module';
@@ -26,6 +27,7 @@ import { UsersModule } from './users/users.module';
     PrismaModule,
     AuthModule,
     HealthModule,
+    NotificationsModule,
     DashboardModule,
     TenantsModule,
     ProjectsModule,
