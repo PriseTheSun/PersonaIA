@@ -105,6 +105,13 @@ não dispensa tenant/workspace explícito nem permite associação cross-tenant.
 | CY-18 | mesma identidade solicita cadastro em A e B | notificações não colidem; aprovar A resolve apenas A e B permanece `PENDING_APPROVAL`/não resolvida |
 | CY-19 | CLIENT_ADMIN tenta adicionar identidade global `SUSPENDED` com membership `ACTIVE` | operação falha; estado global permanece suspenso e nenhum vínculo ativo é criado |
 | CY-20 | identidade ACTIVE ganha/revoga membership em B com JWT emitido no contexto A | mesmo JWT reflete grant e revoke na requisição seguinte; mudanças scoped não retornam 401 nem revogam a sessão |
+| CY-21 | membro ativo no workspace, sem `PERSONA`/`RESEARCH READ` (ou com `DENY`), chama diretamente listagem, detalhe e snapshots | API nega ou filtra integralmente ativos/snapshots; membership isolada não concede leitura funcional |
+| CY-22 | ativo tenant-wide está associado aos workspaces A1 e A2, mas o membro só lê A1 | resposta não inclui ID de A2 e a contagem de uso considera apenas projetos autorizados |
+| CY-23 | CLIENT_ADMIN é demovido para CLIENT_MEMBER com sessão vigente | requisição seguinte perde administração herdada de todos os workspaces e nenhuma rota legada aceita `role/tenantId` global stale |
+| CY-24 | CLIENT_ADMIN A troca `tenantId`/`workspaceId` da visão geral para B | dashboard rejeita o escopo estrangeiro; nunca ignora o seletor e devolve métricas do contexto global stale |
+| CY-25 | CLIENT_ADMIN (inclusive `User.role` stale) chama `/user-access` | listagem e edição global negadas; promoção a SUPER_ADMIN só ocorre na rota global SUPER-only |
+| CY-26 | dois SUPER_ADMIN tentam demover um ao outro simultaneamente | exatamente uma demissão pode confirmar; pelo menos um SUPER_ADMIN global permanece ativo sob lock/transação |
+| CY-27 | vínculo é rejeitado/removido | sai do acesso efetivo, mas permanece histórico e listável ao administrador com status `REMOVED` |
 
 ## 5. Interface: acessibilidade, responsividade e i18n
 

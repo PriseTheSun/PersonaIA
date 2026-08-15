@@ -62,9 +62,9 @@ INSERT INTO "Tenant" ("id", "name", "slug", "status", "updatedAt") VALUES
   ('10000000-0000-4000-8000-00000000000a', 'QA Tenant A', 'qa-invariants-a', 'ACTIVE', CURRENT_TIMESTAMP),
   ('10000000-0000-4000-8000-00000000000b', 'QA Tenant B', 'qa-invariants-b', 'ACTIVE', CURRENT_TIMESTAMP);
 
-INSERT INTO "User" ("id", "email", "name", "passwordHash", "role", "status", "updatedAt") VALUES
-  ('10000000-0000-4000-8000-00000000001a', 'qa-invariants-a@example.test', 'QA A', 'not-a-real-login-hash', 'PROJECT_USER', 'ACTIVE', CURRENT_TIMESTAMP),
-  ('10000000-0000-4000-8000-00000000001b', 'qa-invariants-b@example.test', 'QA B', 'not-a-real-login-hash', 'PROJECT_USER', 'ACTIVE', CURRENT_TIMESTAMP);
+INSERT INTO "User" ("id", "tenantId", "email", "name", "passwordHash", "role", "status", "updatedAt") VALUES
+  ('10000000-0000-4000-8000-00000000001a', '10000000-0000-4000-8000-00000000000a', 'qa-invariants-a@example.test', 'QA A', 'not-a-real-login-hash', 'PROJECT_USER', 'ACTIVE', CURRENT_TIMESTAMP),
+  ('10000000-0000-4000-8000-00000000001b', '10000000-0000-4000-8000-00000000000b', 'qa-invariants-b@example.test', 'QA B', 'not-a-real-login-hash', 'PROJECT_USER', 'ACTIVE', CURRENT_TIMESTAMP);
 
 INSERT INTO "ClientMembership" ("id", "tenantId", "userId", "role", "status", "updatedAt") VALUES
   ('10000000-0000-4000-8000-00000000002a', '10000000-0000-4000-8000-00000000000a', '10000000-0000-4000-8000-00000000001a', 'CLIENT_ADMIN', 'ACTIVE', CURRENT_TIMESTAMP),

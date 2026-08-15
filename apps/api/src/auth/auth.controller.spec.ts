@@ -19,7 +19,8 @@ describe('AuthController session persistence', () => {
     };
     const response = { cookie: jest.fn() };
     const request = { get: jest.fn().mockReturnValue('test-agent'), ip: '127.0.0.1' };
-    return { controller: new AuthController(auth as never, config as never), auth, response, request };
+    const access = { contexts: jest.fn().mockResolvedValue([]) };
+    return { controller: new AuthController(auth as never, config as never, access as never), auth, response, request };
   }
 
   it('uses browser-session cookies when remember me is disabled', async () => {

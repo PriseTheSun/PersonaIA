@@ -13,6 +13,7 @@ const allowMutation = process.env.RUN_MUTATING === '1';
 const credentials = config.credentials ?? {};
 const ids = config.ids ?? {};
 const sentinels = config.sentinels ?? {};
+const expected = config.expected ?? {};
 const probes = config.probes ?? {};
 const disposableAdminRace = config.disposableAdminRace ?? {};
 const sessions = new Map();
@@ -44,8 +45,8 @@ function url(path) {
   return `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
-async function request(method, path, { session, token, body } = {}) {
-  const headers = { accept: 'application/json' };
+async function request(method, path, { session, token, body, headers: customHeaders } = {}) {
+  const headers = { accept: 'application/json', ...customHeaders };
   const accessToken = session?.accessToken ?? token;
   if (accessToken) headers.authorization = `Bearer ${accessToken}`;
   if (session?.cookie) headers.cookie = session.cookie;
@@ -331,6 +332,13 @@ test('RN-05/CY-01: JWT perde acesso na requisição seguinte à revogação', as
   try {
     const after = await request('GET', `/tenants/${ids.tenantA}/workspaces`, { session: memberSession });
     assertDenied(after, 'JWT após revogação');
+    const history = await request('GET', `/tenants/${ids.tenantA}/memberships`, { session: adminSession });
+    assert.equal(history.status, 200);
+    assert.equal(
+      records(history).find((item) => item.userId === ids.revocableMemberA)?.status,
+      'REMOVED',
+      'vínculo removido desapareceu do histórico administrativo'
+    );
   } finally {
     const restore = await request('PATCH', membershipPath, {
       session: adminSession,
@@ -772,6 +780,248 @@ test('RN-12/CY-06: DENY de projeto vence ADMIN herdado sem contaminar outro proj
   );
 });
 
+test('RN-04/CY-21: membership sem READ não expõe ativos nem snapshots por chamada direta', async (t) => {
+  if (!requireConfig(
+    t,
+    'baseUrl',
+    'credentials.noAssetReadMemberA',
+    'ids.tenantA',
+    'ids.workspaceA1',
+    'ids.projectA1',
+    'ids.personaA',
+    'ids.questionnaireA'
+  )) return;
+  const session = await login('noAssetReadMemberA');
+  const probes = [
+    {
+      label: 'lista de personas',
+      path: `/tenants/${ids.tenantA}/personas?workspaceId=${ids.workspaceA1}`,
+      secrets: [ids.personaA, sentinels.personaA]
+    },
+    {
+      label: 'detalhe de persona',
+      path: `/tenants/${ids.tenantA}/personas/${ids.personaA}`,
+      detail: true,
+      secrets: [ids.personaA, sentinels.personaA]
+    },
+    {
+      label: 'lista de questionários',
+      path: `/tenants/${ids.tenantA}/questionnaires?workspaceId=${ids.workspaceA1}`,
+      secrets: [ids.questionnaireA, sentinels.questionnaireA]
+    },
+    {
+      label: 'detalhe de questionário',
+      path: `/tenants/${ids.tenantA}/questionnaires/${ids.questionnaireA}`,
+      detail: true,
+      secrets: [ids.questionnaireA, sentinels.questionnaireA]
+    },
+    {
+      label: 'snapshots de uso do projeto',
+      path: `/projects/${ids.projectA1}/assets/usage`,
+      secrets: [
+        ids.personaA,
+        ids.questionnaireA,
+        sentinels.personaA,
+        sentinels.questionnaireA
+      ]
+    }
+  ];
+
+  for (const probe of probes) {
+    const response = await request('GET', probe.path, { session });
+    if (probe.detail) {
+      assertDenied(response, probe.label);
+      continue;
+    }
+    assert.ok(
+      [200, 403, 404].includes(response.status),
+      `${probe.label}: resposta inesperada (${response.status})`
+    );
+    if (response.status === 200) {
+      const publicPayload = JSON.stringify(response.json ?? {});
+      for (const secret of probe.secrets.filter(Boolean)) {
+        assert.equal(
+          publicPayload.includes(secret),
+          false,
+          `${probe.label}: resposta filtrada ainda expôs ${secret}`
+        );
+      }
+    }
+  }
+});
+
+test('RN-03/RN-04/CY-22: ativo compartilhado não vaza associação ou uso de workspace inacessível', async (t) => {
+  if (!requireConfig(
+    t,
+    'baseUrl',
+    'credentials.limitedAssetReadMemberA',
+    'ids.tenantA',
+    'ids.workspaceA1',
+    'ids.workspaceA2',
+    'ids.personaA',
+    'expected.authorizedPersonaUsageCount'
+  )) return;
+  const session = await login('limitedAssetReadMemberA');
+  const response = await request(
+    'GET',
+    `/tenants/${ids.tenantA}/personas?workspaceId=${ids.workspaceA1}`,
+    { session }
+  );
+  assert.equal(response.status, 200, `lista autorizada falhou (${response.status})`);
+  const persona = records(response).find((item) => item.id === ids.personaA);
+  assert.ok(persona, 'persona compartilhada não apareceu no workspace autorizado');
+  assert.equal(
+    JSON.stringify(persona).includes(ids.workspaceA2),
+    false,
+    'payload expôs ID do workspace não autorizado'
+  );
+  assert.equal(
+    persona.activeProjectUsageCount,
+    expected.authorizedPersonaUsageCount,
+    'contagem agregou projetos fora dos workspaces autorizados'
+  );
+});
+
+test('RN-04/RN-05/CY-23: demissão de CLIENT_ADMIN revoga autoridade herdada e legado stale', async (t) => {
+  if (!requireMutation(t) || !requireConfig(
+    t,
+    'baseUrl',
+    'credentials.clientAdminA',
+    'credentials.clientAdminA2',
+    'ids.tenantA',
+    'ids.workspaceA1',
+    'ids.clientAdminA2'
+  )) return;
+  if (!allowedOrigin) assert.fail('origin permitido não configurado');
+  const managerSession = await login('clientAdminA');
+  const demotedSession = await login('clientAdminA2');
+  assert.ok(managerSession.csrfToken && managerSession.cookie, 'login do admin gestor sem cookies CSRF');
+  const legacyBefore = await request('GET', '/users', {
+    session: demotedSession,
+    headers: { 'X-Tenant-Id': ids.tenantA }
+  });
+  assert.equal(legacyBefore.status, 200, `fixture não exercita a rota legada antes da demissão (${legacyBefore.status})`);
+
+  const demoted = await request(
+    'PATCH',
+    `/tenants/${ids.tenantA}/memberships/${ids.clientAdminA2}`,
+    { session: managerSession, body: { role: 'CLIENT_MEMBER', status: 'ACTIVE' } }
+  );
+  assert.ok([200, 204].includes(demoted.status), `demissão falhou (${demoted.status})`);
+
+  try {
+    const [workspaceAdminProbe, legacyUsersProbe, me] = await Promise.all([
+      request('GET', `/workspaces/${ids.workspaceA1}/members`, { session: demotedSession }),
+      request('GET', '/users', {
+        session: demotedSession,
+        headers: { 'X-Tenant-Id': ids.tenantA }
+      }),
+      request('GET', '/auth/me', { session: demotedSession })
+    ]);
+    assertDenied(workspaceAdminProbe, 'WORKSPACE_ADMIN herdado permaneceu após demissão');
+    assertDenied(legacyUsersProbe, 'rota legada confiou em role/tenantId stale');
+    assert.equal(me.status, 200, 'demissão scoped invalidou a sessão global');
+    const context = me.json?.contexts?.find((item) => item.tenantId === ids.tenantA);
+    assert.equal(context?.role, 'CLIENT_MEMBER', 'contexto não refletiu a nova função imediatamente');
+    assert.equal(
+      context?.workspaces?.some((workspace) => workspace.role === 'WORKSPACE_ADMIN'),
+      false,
+      'contexto ainda expôs WORKSPACE_ADMIN herdado'
+    );
+  } finally {
+    const restored = await request(
+      'PATCH',
+      `/tenants/${ids.tenantA}/memberships/${ids.clientAdminA2}`,
+      { session: managerSession, body: { role: 'CLIENT_ADMIN', status: 'ACTIVE' } }
+    );
+    assert.ok([200, 204].includes(restored.status), `fixture CLIENT_ADMIN não foi restaurada (${restored.status})`);
+  }
+});
+
+test('RN-03/RN-04/CY-24: dashboard valida tenant e workspace selecionados', async (t) => {
+  if (!requireConfig(
+    t,
+    'baseUrl',
+    'credentials.clientAdminA',
+    'ids.tenantB',
+    'ids.workspaceB1'
+  )) return;
+  const session = await login('clientAdminA');
+  const [tenantSwap, workspaceSwap] = await Promise.all([
+    request('GET', `/dashboard/summary?range=30d&tenantId=${ids.tenantB}`, { session }),
+    request('GET', `/dashboard/summary?range=30d&workspaceId=${ids.workspaceB1}`, { session })
+  ]);
+  assertDenied(tenantSwap, 'dashboard aceitou tenant estrangeiro');
+  assertDenied(workspaceSwap, 'dashboard aceitou workspace estrangeiro');
+});
+
+test('RN-04/CY-25: user-access global é invisível para CLIENT_ADMIN', async (t) => {
+  if (!requireConfig(t, 'baseUrl', 'credentials.clientAdminA')) return;
+  const session = await login('clientAdminA');
+  const response = await request('GET', '/user-access', { session });
+  assertDenied(response, 'CLIENT_ADMIN listou controle global');
+});
+
+test('RN-04/CY-25: CLIENT_ADMIN não edita identidade pela rota global', async (t) => {
+  if (!requireMutation(t) || !requireConfig(
+    t,
+    'baseUrl',
+    'credentials.clientAdminA',
+    'ids.workspaceMemberA'
+  )) return;
+  const session = await login('clientAdminA');
+  const response = await request('PATCH', `/user-access/${ids.workspaceMemberA}`, {
+    session,
+    body: { role: 'SUPER_ADMIN', tenantId: null, status: 'ACTIVE' }
+  });
+  assertDenied(response, 'CLIENT_ADMIN editou identidade global');
+});
+
+test('invariante global/CY-26: corrida não remove todos os SUPER_ADMIN ativos', async (t) => {
+  if (!requireMutation(t) || !requireConfig(
+    t,
+    'baseUrl',
+    'credentials.superAdmin',
+    'credentials.superAdmin2',
+    'ids.tenantA',
+    'ids.superAdmin2'
+  )) return;
+  if (!allowedOrigin) assert.fail('origin permitido não configurado');
+  const [first, second] = await Promise.all([login('superAdmin'), login('superAdmin2')]);
+  const firstId = (await request('GET', '/auth/me', { session: first })).json?.id;
+  assert.equal(typeof firstId, 'string', 'SUPER_ADMIN principal sem id');
+
+  const results = await Promise.all([
+    request('PATCH', `/user-access/${ids.superAdmin2}`, {
+      session: first,
+      body: { role: 'PROJECT_USER', tenantId: ids.tenantA, status: 'ACTIVE' }
+    }),
+    request('PATCH', `/user-access/${firstId}`, {
+      session: second,
+      body: { role: 'PROJECT_USER', tenantId: ids.tenantA, status: 'ACTIVE' }
+    })
+  ]);
+  const successfulIndex = results.findIndex((response) => [200, 204].includes(response.status));
+  assert.notEqual(successfulIndex, -1, 'nenhuma das demissões concorrentes confirmou');
+  assert.equal(
+    results.filter((response) => [200, 204].includes(response.status)).length,
+    1,
+    'as duas demissões de SUPER_ADMIN confirmaram'
+  );
+  assert.ok(
+    [401, 403, 409, 422].includes(results[1 - successfulIndex].status),
+    `segunda demissão falhou de modo inesperado (${results[1 - successfulIndex].status})`
+  );
+
+  const restorer = successfulIndex === 0 ? first : second;
+  const demotedId = successfulIndex === 0 ? ids.superAdmin2 : firstId;
+  const restored = await request('PATCH', `/user-access/${demotedId}`, {
+    session: restorer,
+    body: { role: 'SUPER_ADMIN', tenantId: null, status: 'ACTIVE' }
+  });
+  assert.ok([200, 204].includes(restored.status), `SUPER_ADMIN da fixture não foi restaurado (${restored.status})`);
+});
+
 test('matriz literal/CY-12: PERSONA WRITE cria projeto sem ganhar administração', async (t) => {
   if (!requireMutation(t) || !requireConfig(
     t,
@@ -858,6 +1108,10 @@ test('RN-01/RN-13/CY-11: corrida não remove todos os CLIENT_ADMIN ativos', asyn
     (membership) => membership.role === 'CLIENT_ADMIN' && membership.status === 'ACTIVE'
   );
   assert.ok(activeAdmins.length >= 1, 'tenant ficou sem CLIENT_ADMIN ativo');
+  assert.ok(
+    records(current).some((membership) => membership.role === 'CLIENT_ADMIN' && membership.status === 'REMOVED'),
+    'CLIENT_ADMIN removido não permaneceu listável no histórico'
+  );
 });
 
 test('RN-02/RN-13/CY-11: corrida não remove todos os WORKSPACE_ADMIN ativos', async (t) => {
@@ -893,6 +1147,10 @@ test('RN-02/RN-13/CY-11: corrida não remove todos os WORKSPACE_ADMIN ativos', a
     (membership) => membership.role === 'WORKSPACE_ADMIN' && membership.status === 'ACTIVE'
   );
   assert.ok(activeAdmins.length >= 1, 'workspace ficou sem WORKSPACE_ADMIN ativo');
+  assert.ok(
+    records(current).some((membership) => membership.role === 'WORKSPACE_ADMIN' && membership.status === 'REMOVED'),
+    'WORKSPACE_ADMIN removido não permaneceu listável no histórico'
+  );
 });
 
 test('contrato de erro: nenhuma resposta testada expõe detalhes internos', async (t) => {

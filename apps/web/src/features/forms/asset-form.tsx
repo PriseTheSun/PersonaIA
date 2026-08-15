@@ -10,14 +10,14 @@ import { apiRequest, csrfHeaders } from '@/lib/api';
 import { createAssetFormSchema, type CreateAssetFormInput } from './form-schemas';
 import { FormField } from './form-field';
 
-export function AssetForm({ path, initial, submitLabel, onSaved, onCancel }: { path: string; initial?: CreateAssetFormInput; submitLabel: string; onSaved: () => void; onCancel: () => void }) {
+export function AssetForm({ path, initial, extraBody, submitLabel, onSaved, onCancel }: { path: string; initial?: CreateAssetFormInput; extraBody?: Record<string, unknown>; submitLabel: string; onSaved: () => void; onCancel: () => void }) {
   const { t } = useTranslation();
   const [error, setError] = useState<string | null>(null);
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<CreateAssetFormInput>({ resolver: zodResolver(createAssetFormSchema), defaultValues: initial ?? { name: '', description: '' } });
   const submit = handleSubmit(async (input) => {
     setError(null);
     try {
-      await apiRequest(path, z.unknown(), { method: initial ? 'PATCH' : 'POST', headers: csrfHeaders(), body: input });
+      await apiRequest(path, z.unknown(), { method: initial ? 'PATCH' : 'POST', headers: csrfHeaders(), body: { ...input, ...extraBody } });
       onSaved();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : t('forms.error'));

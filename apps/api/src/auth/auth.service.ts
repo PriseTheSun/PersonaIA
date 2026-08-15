@@ -34,11 +34,14 @@ export class AuthService {
     const userEmail = normalizeEmail(input.email);
     const existingIdentity = await this.prisma.user.findUnique({
       where: { email: userEmail },
-      select: { id: true, passwordHash: true },
+      select: { id: true, passwordHash: true, status: true },
     });
     if (existingIdentity) {
       const ownsIdentity = await argon2.verify(existingIdentity.passwordHash, input.password).catch(() => false);
       if (!ownsIdentity) return { status: 'PENDING' as const };
+      if (!new Set<RecordStatus>([
+        RecordStatus.PENDING, RecordStatus.PENDING_APPROVAL, RecordStatus.INVITED, RecordStatus.ACTIVE,
+      ]).has(existingIdentity.status)) return { status: 'PENDING' as const };
     }
     const passwordHash = existingIdentity?.passwordHash ?? await argon2.hash(input.password, {
       type: argon2.argon2id, memoryCost: 65_536, timeCost: 3, parallelism: 1
@@ -49,6 +52,9 @@ export class AuthService {
         if (user) {
           const ownsIdentity = await argon2.verify(user.passwordHash, input.password).catch(() => false);
           if (!ownsIdentity) return;
+          if (!new Set<RecordStatus>([
+            RecordStatus.PENDING, RecordStatus.PENDING_APPROVAL, RecordStatus.INVITED, RecordStatus.ACTIVE,
+          ]).has(user.status)) return;
         } else {
           user = await tx.user.create({
             data: {

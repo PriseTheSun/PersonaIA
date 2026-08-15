@@ -33,4 +33,25 @@ describe('multi-client access contracts', () => {
     expect(result.success).toBe(true);
     if (result.success) expect(result.data.effectivePermissions[0]?.effect).toBe('DENY');
   });
+
+  it('normalizes the canonical backend context envelope for the context switcher', () => {
+    const result = userSchema.safeParse({
+      id: 'user-1', name: 'Admin', email: 'admin@example.com', role: 'CLIENT_ADMIN', status: 'ACTIVE',
+      contexts: [{
+        tenantId: 'tenant-a', role: 'CLIENT_ADMIN', status: 'ACTIVE', selected: true,
+        tenant: { id: 'tenant-a', name: 'Client A', slug: 'client-a', status: 'ACTIVE' },
+        workspaces: [{
+          workspaceId: 'workspace-a', role: 'WORKSPACE_ADMIN', status: 'ACTIVE',
+          workspace: { id: 'workspace-a', name: 'Main', slug: 'main', isDefault: true },
+          permissions: [{ feature: 'DASHBOARD', level: 'ADMIN', effect: 'ALLOW' }],
+        }],
+      }],
+    });
+
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.contexts?.[0]?.tenantName).toBe('Client A');
+      expect(result.data.contexts?.[0]?.workspaces[0]?.id).toBe('workspace-a');
+    }
+  });
 });

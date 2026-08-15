@@ -19,7 +19,9 @@ export class AssetsService {
     const admin = this.access.isSuper(actor) || await this.isClientAdmin(actor.id, tenantId);
     let workspaceIds: string[] | undefined;
     if (query.workspaceId) {
-      const workspace = await this.access.requireWorkspace(actor, query.workspaceId);
+      const workspace = await this.access.requireFeature(actor, {
+        workspaceId: query.workspaceId, feature: this.feature(kind), level: PermissionLevel.READ,
+      });
       if (workspace.tenantId !== tenantId) throw new NotFoundException('Workspace não encontrado.');
       workspaceIds = [query.workspaceId];
     } else if (!admin) {
@@ -30,7 +32,13 @@ export class AssetsService {
         },
         select: { workspaceId: true },
       });
-      workspaceIds = memberships.map(({ workspaceId }) => workspaceId);
+      workspaceIds = [];
+      for (const { workspaceId } of memberships) {
+        try {
+          await this.access.requireFeature(actor, { workspaceId, feature: this.feature(kind), level: PermissionLevel.READ });
+          workspaceIds.push(workspaceId);
+        } catch { /* Explicit deny or no READ: omit this workspace. */ }
+      }
     }
     if (kind === 'PERSONA') {
       const [items, usage] = await Promise.all([this.prisma.persona.findMany({
@@ -39,11 +47,17 @@ export class AssetsService {
           ...(workspaceIds ? { workspaces: { some: { workspaceId: { in: workspaceIds }, disassociatedAt: null } } } : {}),
         },
         include: {
-          workspaces: { where: { disassociatedAt: null }, select: { workspaceId: true } },
+          workspaces: {
+            where: { disassociatedAt: null, ...(workspaceIds ? { workspaceId: { in: workspaceIds } } : {}) },
+            select: { workspaceId: true },
+          },
         },
         orderBy: { createdAt: 'desc' },
       }), this.prisma.projectPersonaUsage.groupBy({
-        by: ['personaId'], where: { tenantId, project: { status: RecordStatus.ACTIVE } }, _count: true,
+        by: ['personaId'], where: {
+          tenantId, project: { status: RecordStatus.ACTIVE },
+          ...(workspaceIds ? { workspaceId: { in: workspaceIds } } : {}),
+        }, _count: true,
       })]);
       const usageCounts = new Map(usage.map((item) => [item.personaId, item._count]));
       return items.map(({ workspaces, ...item }) => ({
@@ -56,11 +70,17 @@ export class AssetsService {
         ...(workspaceIds ? { workspaces: { some: { workspaceId: { in: workspaceIds }, disassociatedAt: null } } } : {}),
       },
       include: {
-        workspaces: { where: { disassociatedAt: null }, select: { workspaceId: true } },
+        workspaces: {
+          where: { disassociatedAt: null, ...(workspaceIds ? { workspaceId: { in: workspaceIds } } : {}) },
+          select: { workspaceId: true },
+        },
       },
       orderBy: { createdAt: 'desc' },
     }), this.prisma.projectQuestionnaireUsage.groupBy({
-      by: ['questionnaireId'], where: { tenantId, project: { status: RecordStatus.ACTIVE } }, _count: true,
+      by: ['questionnaireId'], where: {
+        tenantId, project: { status: RecordStatus.ACTIVE },
+        ...(workspaceIds ? { workspaceId: { in: workspaceIds } } : {}),
+      }, _count: true,
     })]);
     const usageCounts = new Map(usage.map((item) => [item.questionnaireId, item._count]));
     return items.map(({ workspaces, ...item }) => ({
@@ -80,6 +100,7 @@ export class AssetsService {
     const admin = this.access.isSuper(actor) || await this.isClientAdmin(actor.id, tenantId);
     const workspaceIds = [...new Set(input.workspaceIds)];
     if (!admin && workspaceIds.length === 0) throw new BadRequestException('Informe um workspace para validar a permissão funcional.');
+    if (!admin && workspaceIds.length > 1) throw new BadRequestException('Membros podem criar o ativo em um workspace por vez.');
     const feature = this.feature(kind);
     for (const workspaceId of workspaceIds) {
       const workspace = await this.access.requireFeature(actor, { workspaceId, feature, level: PermissionLevel.WRITE });
@@ -89,11 +110,12 @@ export class AssetsService {
       const asset = kind === 'PERSONA'
         ? await tx.persona.create({ data: { tenantId, name: input.name.trim(), description: input.description?.trim(), data: input.data as Prisma.InputJsonValue } })
         : await tx.questionnaire.create({ data: { tenantId, name: input.name.trim(), description: input.description?.trim(), data: input.data as Prisma.InputJsonValue } });
-      // Association is a separate admin capability; auto-associate only for scoped/global admins.
+      // Creation in a workspace establishes its initial reference. Additional
+      // associations remain restricted to scoped/global administrators.
+      const associatedWorkspaceIds: string[] = [];
       for (const workspaceId of workspaceIds) {
-        if (admin || await this.isWorkspaceAdminTx(tx, actor.id, workspaceId)) {
-          await this.associateTx(tx, kind, tenantId, asset.id, workspaceId, actor.id);
-        }
+        await this.associateTx(tx, kind, tenantId, asset.id, workspaceId, actor.id);
+        associatedWorkspaceIds.push(workspaceId);
       }
       await tx.auditLog.create({
         data: {
@@ -102,7 +124,7 @@ export class AssetsService {
           scopeType: 'TENANT', scopeId: tenantId, metadata: { requestedWorkspaceIds: workspaceIds },
         },
       });
-      return { ...asset, workspaceIds };
+      return { ...asset, workspaceIds: associatedWorkspaceIds };
     });
   }
 
@@ -173,7 +195,12 @@ export class AssetsService {
     const workspace = await this.access.requireWorkspace(actor, workspaceId, true);
     if (workspace.tenantId !== tenantId) throw new NotFoundException('Workspace não encontrado.');
     await this.requireAsset(kind, tenantId, assetId);
-    await this.prisma.$transaction((tx) => this.associateTx(tx, kind, tenantId, assetId, workspaceId, actor.id));
+    await this.prisma.$transaction(async (tx) => {
+      await this.access.lockTenant(tx, tenantId);
+      await this.requireAssociationAdminTx(tx, actor, tenantId, workspaceId);
+      await this.requireAssetTx(tx, kind, tenantId, assetId);
+      await this.associateTx(tx, kind, tenantId, assetId, workspaceId, actor.id);
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     return { associated: true, assetId, workspaceId };
   }
 
@@ -182,6 +209,9 @@ export class AssetsService {
     if (workspace.tenantId !== tenantId) throw new NotFoundException('Workspace não encontrado.');
     await this.requireAsset(kind, tenantId, assetId);
     await this.prisma.$transaction(async (tx) => {
+      await this.access.lockTenant(tx, tenantId);
+      await this.requireAssociationAdminTx(tx, actor, tenantId, workspaceId);
+      await this.requireAssetTx(tx, kind, tenantId, assetId);
       const now = new Date();
       const updated = kind === 'PERSONA'
         ? await tx.workspacePersona.updateMany({ where: { tenantId, workspaceId, personaId: assetId, disassociatedAt: null }, data: { disassociatedAt: now } })
@@ -196,8 +226,70 @@ export class AssetsService {
           scopeType: 'WORKSPACE', scopeId: workspaceId,
         },
       });
-    });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     return { associated: false, assetId, workspaceId };
+  }
+
+  async replaceAssociations(kind: Kind, tenantId: string, assetId: string, requestedIds: string[], actor: Principal) {
+    await this.access.requireTenant(actor, tenantId);
+    await this.requireAsset(kind, tenantId, assetId);
+    return this.prisma.$transaction(async (tx) => {
+      await this.access.lockTenant(tx, tenantId);
+      await this.requireAssetTx(tx, kind, tenantId, assetId);
+      const validRequested = await tx.workspace.count({
+        where: { id: { in: requestedIds }, tenantId, status: RecordStatus.ACTIVE },
+      });
+      if (validRequested !== requestedIds.length) throw new NotFoundException('Um ou mais workspaces não foram encontrados.');
+      const liveIds = kind === 'PERSONA'
+        ? (await tx.workspacePersona.findMany({ where: { tenantId, personaId: assetId, disassociatedAt: null }, select: { workspaceId: true } })).map(({ workspaceId }) => workspaceId)
+        : (await tx.workspaceQuestionnaire.findMany({ where: { tenantId, questionnaireId: assetId, disassociatedAt: null }, select: { workspaceId: true } })).map(({ workspaceId }) => workspaceId);
+      const tenantAdmin = this.access.isSuper(actor) || (await tx.clientMembership.count({
+        where: { tenantId, userId: actor.id, role: ClientRole.CLIENT_ADMIN, status: MembershipStatus.ACTIVE },
+      })) > 0;
+      const manageable = new Set<string>();
+      if (tenantAdmin) {
+        for (const workspaceId of [...new Set([...liveIds, ...requestedIds])]) manageable.add(workspaceId);
+      } else {
+        const workspaceAdmins = await tx.workspaceMembership.findMany({
+          where: {
+            tenantId, userId: actor.id, role: 'WORKSPACE_ADMIN', status: MembershipStatus.ACTIVE,
+            clientMembership: { status: MembershipStatus.ACTIVE }, workspaceId: { in: requestedIds },
+          },
+          select: { workspaceId: true },
+        });
+        for (const { workspaceId } of workspaceAdmins) manageable.add(workspaceId);
+        if (requestedIds.some((workspaceId) => !manageable.has(workspaceId))) throw new NotFoundException('Workspace não encontrado.');
+      }
+      // A workspace admin's batch is additive within the requested scope;
+      // associations omitted from the UI are preserved. Use the scoped
+      // DELETE endpoint for an explicit disassociation.
+      const preservedIds = tenantAdmin ? liveIds.filter((workspaceId) => !manageable.has(workspaceId)) : liveIds;
+      const desiredIds = [...new Set([...preservedIds, ...requestedIds])];
+      const toAdd = desiredIds.filter((workspaceId) => !liveIds.includes(workspaceId));
+      const toRemove = liveIds.filter((workspaceId) => manageable.has(workspaceId) && !desiredIds.includes(workspaceId));
+      for (const workspaceId of toAdd) await this.associateTx(tx, kind, tenantId, assetId, workspaceId, actor.id);
+      if (toRemove.length) {
+        const now = new Date();
+        if (kind === 'PERSONA') {
+          await tx.workspacePersona.updateMany({ where: { tenantId, personaId: assetId, workspaceId: { in: toRemove }, disassociatedAt: null }, data: { disassociatedAt: now } });
+        } else {
+          await tx.workspaceQuestionnaire.updateMany({ where: { tenantId, questionnaireId: assetId, workspaceId: { in: toRemove }, disassociatedAt: null }, data: { disassociatedAt: now } });
+        }
+        await tx.assetAssociationHistory.createMany({
+          data: toRemove.map((workspaceId) => ({
+            tenantId, workspaceId, assetType: kind as AssetType, assetId,
+            action: AssociationAction.DISASSOCIATED, actorId: actor.id, metadata: { source: 'BULK_REPLACE' },
+          })),
+        });
+      }
+      await tx.auditLog.create({
+        data: {
+          actorId: actor.id, tenantId, action: `${kind}_WORKSPACES_REPLACED`, targetType: kind, targetId: assetId,
+          scopeType: 'TENANT', scopeId: tenantId, metadata: { added: toAdd, removed: toRemove, preserved: preservedIds },
+        },
+      });
+      return { assetId, workspaceIds: desiredIds, added: toAdd, removed: toRemove };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
   }
 
   async recordUsage(rawType: string, projectId: string, assetId: string, actor: Principal) {
@@ -206,13 +298,21 @@ export class AssetsService {
     await this.access.requireFeature(actor, {
       workspaceId: project.workspaceId, projectId, feature: this.feature(kind), level: PermissionLevel.WRITE,
     });
-    const asset = await this.requireAsset(kind, project.tenantId, assetId);
-    const associated = kind === 'PERSONA'
-      ? await this.prisma.workspacePersona.count({ where: { workspaceId: project.workspaceId, personaId: assetId, disassociatedAt: null } })
-      : await this.prisma.workspaceQuestionnaire.count({ where: { workspaceId: project.workspaceId, questionnaireId: assetId, disassociatedAt: null } });
-    if (!associated) throw new ConflictException('O ativo não está associado ao workspace do projeto.');
-    const snapshot = { id: asset.id, name: asset.name, description: asset.description, data: asset.data, version: asset.version } as Prisma.InputJsonValue;
     return this.prisma.$transaction(async (tx) => {
+      await this.access.lockTenant(tx, project.tenantId);
+      const currentProject = await tx.project.findFirst({
+        where: { id: projectId, tenantId: project.tenantId, workspaceId: project.workspaceId, status: RecordStatus.ACTIVE },
+      });
+      if (!currentProject) throw new NotFoundException('Projeto não encontrado.');
+      const asset = kind === 'PERSONA'
+        ? await tx.persona.findFirst({ where: { id: assetId, tenantId: project.tenantId, status: RecordStatus.ACTIVE } })
+        : await tx.questionnaire.findFirst({ where: { id: assetId, tenantId: project.tenantId, status: RecordStatus.ACTIVE } });
+      if (!asset) throw new NotFoundException('Ativo não encontrado.');
+      const associated = kind === 'PERSONA'
+        ? await tx.workspacePersona.count({ where: { workspaceId: project.workspaceId, personaId: assetId, disassociatedAt: null } })
+        : await tx.workspaceQuestionnaire.count({ where: { workspaceId: project.workspaceId, questionnaireId: assetId, disassociatedAt: null } });
+      if (!associated) throw new ConflictException('O ativo não está associado ao workspace do projeto.');
+      const snapshot = { id: asset.id, name: asset.name, description: asset.description, data: asset.data, version: asset.version } as Prisma.InputJsonValue;
       const usage = kind === 'PERSONA'
         ? await tx.projectPersonaUsage.create({ data: { tenantId: project.tenantId, workspaceId: project.workspaceId, projectId, personaId: assetId, version: asset.version, snapshot } })
         : await tx.projectQuestionnaireUsage.create({ data: { tenantId: project.tenantId, workspaceId: project.workspaceId, projectId, questionnaireId: assetId, version: asset.version, snapshot } });
@@ -227,10 +327,21 @@ export class AssetsService {
   }
 
   async listUsage(projectId: string, actor: Principal) {
-    await this.access.requireProject(actor, projectId);
+    const project = await this.access.requireProject(actor, projectId);
+    let personaRead = true;
+    let questionnaireRead = true;
+    try {
+      await this.access.requireFeature(actor, { workspaceId: project.workspaceId, projectId, feature: Feature.PERSONA, level: PermissionLevel.READ });
+    } catch { personaRead = false; }
+    try {
+      await this.access.requireFeature(actor, { workspaceId: project.workspaceId, projectId, feature: Feature.RESEARCH, level: PermissionLevel.READ });
+    } catch { questionnaireRead = false; }
+    if (!personaRead && !questionnaireRead) {
+      await this.access.requireFeature(actor, { workspaceId: project.workspaceId, projectId, feature: Feature.PERSONA, level: PermissionLevel.READ });
+    }
     const [personas, questionnaires] = await Promise.all([
-      this.prisma.projectPersonaUsage.findMany({ where: { projectId }, orderBy: { createdAt: 'desc' } }),
-      this.prisma.projectQuestionnaireUsage.findMany({ where: { projectId }, orderBy: { createdAt: 'desc' } }),
+      personaRead ? this.prisma.projectPersonaUsage.findMany({ where: { projectId }, orderBy: { createdAt: 'desc' } }) : [],
+      questionnaireRead ? this.prisma.projectQuestionnaireUsage.findMany({ where: { projectId }, orderBy: { createdAt: 'desc' } }) : [],
     ]);
     return {
       personas: personas.map((item) => ({ ...item, assetType: 'PERSONA' as const, sourceAssetId: item.personaId })),
@@ -239,6 +350,10 @@ export class AssetsService {
   }
 
   private async associateTx(tx: Prisma.TransactionClient, kind: Kind, tenantId: string, assetId: string, workspaceId: string, actorId: string) {
+    const alreadyAssociated = kind === 'PERSONA'
+      ? await tx.workspacePersona.count({ where: { tenantId, workspaceId, personaId: assetId, disassociatedAt: null } })
+      : await tx.workspaceQuestionnaire.count({ where: { tenantId, workspaceId, questionnaireId: assetId, disassociatedAt: null } });
+    if (alreadyAssociated) return;
     if (kind === 'PERSONA') {
       await tx.workspacePersona.upsert({
         where: { workspaceId_personaId: { workspaceId, personaId: assetId } },
@@ -261,6 +376,31 @@ export class AssetsService {
         scopeType: 'WORKSPACE', scopeId: workspaceId,
       },
     });
+  }
+
+  private async requireAssetTx(tx: Prisma.TransactionClient, kind: Kind, tenantId: string, assetId: string) {
+    const asset = kind === 'PERSONA'
+      ? await tx.persona.findFirst({ where: { id: assetId, tenantId, status: RecordStatus.ACTIVE } })
+      : await tx.questionnaire.findFirst({ where: { id: assetId, tenantId, status: RecordStatus.ACTIVE } });
+    if (!asset) throw new NotFoundException('Ativo não encontrado.');
+    return asset;
+  }
+
+  private async requireAssociationAdminTx(tx: Prisma.TransactionClient, actor: Principal, tenantId: string, workspaceId: string) {
+    const workspace = await tx.workspace.findFirst({ where: { id: workspaceId, tenantId, status: RecordStatus.ACTIVE, tenant: { status: RecordStatus.ACTIVE } } });
+    if (!workspace) throw new NotFoundException('Workspace não encontrado.');
+    if (this.access.isSuper(actor)) return;
+    const clientAdmin = await tx.clientMembership.count({
+      where: { tenantId, userId: actor.id, role: ClientRole.CLIENT_ADMIN, status: MembershipStatus.ACTIVE },
+    });
+    if (clientAdmin) return;
+    const workspaceAdmin = await tx.workspaceMembership.count({
+      where: {
+        tenantId, workspaceId, userId: actor.id, role: 'WORKSPACE_ADMIN', status: MembershipStatus.ACTIVE,
+        clientMembership: { status: MembershipStatus.ACTIVE },
+      },
+    });
+    if (!workspaceAdmin) throw new NotFoundException('Workspace não encontrado.');
   }
 
   private async requireAssetWrite(kind: Kind, tenantId: string, assetId: string, actor: Principal) {
@@ -290,12 +430,6 @@ export class AssetsService {
   private async isClientAdmin(userId: string, tenantId: string) {
     return (await this.prisma.clientMembership.count({
       where: { userId, tenantId, role: ClientRole.CLIENT_ADMIN, status: MembershipStatus.ACTIVE },
-    })) > 0;
-  }
-
-  private async isWorkspaceAdminTx(tx: Prisma.TransactionClient, userId: string, workspaceId: string) {
-    return (await tx.workspaceMembership.count({
-      where: { userId, workspaceId, role: 'WORKSPACE_ADMIN', status: MembershipStatus.ACTIVE },
     })) > 0;
   }
 

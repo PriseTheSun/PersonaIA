@@ -1,12 +1,14 @@
 import { ArrowRight, Clock3, FolderKanban, UserRoundCog, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { EmptyState, ErrorState, LoadingRows } from '@/components/shared/states';
 import { PageHeader } from '@/components/shared/page-header';
+import { ScopeSelector } from '@/components/shared/scope-selector';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/features/auth/auth-store';
 import { useApiQuery } from '@/hooks/use-api-query';
+import { useActiveScope } from '@/hooks/use-active-scope';
 import { apiRequest } from '@/lib/api';
 import { dashboardSummarySchema, type DashboardRange } from '@/lib/schemas';
 import { formatDate } from '@/lib/utils';
@@ -17,25 +19,26 @@ import { DashboardTrendChart, DashboardTrendChartSkeleton } from './dashboard-tr
 export function DashboardPage() {
   const { t, i18n } = useTranslation();
   const auth = useAuth();
+  const { tenantId, workspaceId } = useActiveScope();
   const [range, setRange] = useState<DashboardRange>('30d');
+  const effectiveRole = auth.status === 'authenticated' ? auth.effectiveRole ?? auth.user.role : null;
+  const activeWorkspace = auth.activeContext?.workspaces.find((workspace) => workspace.id === workspaceId);
+  const dashboardPermission = activeWorkspace?.permissions.find((permission) => permission.feature === 'DASHBOARD');
+  const isImplicitDashboardAdmin = effectiveRole !== null && ['SUPER_ADMIN', 'CLIENT_ADMIN', 'WORKSPACE_ADMIN'].includes(effectiveRole);
+  const hasDashboardAccess = effectiveRole !== null && (isImplicitDashboardAdmin || dashboardPermission?.effect === 'ALLOW');
   const query = useApiQuery(
-    (signal) => apiRequest(`/dashboard/summary?range=${range}`, dashboardSummarySchema, { signal }),
-    [range],
+    (signal) => hasDashboardAccess ? apiRequest(`/dashboard/summary?${new URLSearchParams({ range, ...(tenantId ? { tenantId } : {}), ...(workspaceId ? { workspaceId } : {}) }).toString()}`, dashboardSummarySchema, { signal }) : Promise.reject(new Error('DASHBOARD_READ_REQUIRED')),
+    [range, tenantId, workspaceId, hasDashboardAccess],
   );
   const isSuperAdmin = auth.status === 'authenticated' && auth.user.role === 'SUPER_ADMIN';
-  const isProjectUser = auth.status === 'authenticated' && ['PROJECT_USER', 'WORKSPACE_MEMBER'].includes(auth.effectiveRole ?? auth.user.role);
+  const isWorkspaceMember = effectiveRole !== null && ['PROJECT_USER', 'WORKSPACE_MEMBER'].includes(effectiveRole);
+  const canReviewAccess = effectiveRole !== null && ['SUPER_ADMIN', 'CLIENT_ADMIN'].includes(effectiveRole);
   const rangeLabel = t(`dashboard.ranges.${range}`);
   const summary = query.status === 'success' ? query.data : null;
 
   useEffect(() => { document.title = `${t('dashboard.title')} · ${t('common.appName')}`; }, [t]);
 
-  const metrics: DashboardMetric[] = isProjectUser ? [{
-    key: 'accessibleProjects',
-    icon: FolderKanban,
-    label: t('dashboard.accessibleProjects'),
-    description: t('dashboard.accessibleProjectsDescription'),
-    value: summary?.metrics.accessibleProjects,
-  }] : [
+  const adminMetrics: DashboardMetric[] = [
     {
       key: 'projectsCreated',
       icon: FolderKanban,
@@ -57,53 +60,57 @@ export function DashboardPage() {
       description: t('dashboard.activeUsersDescription'),
       value: summary?.metrics.activeUsers,
     },
-    {
+    ...(canReviewAccess ? [{
       key: 'pendingAccessRequests',
       icon: Clock3,
       label: t('dashboard.pendingAccessRequests'),
       description: t('dashboard.pendingAccessRequestsDescription'),
       value: summary?.metrics.pendingAccessRequests,
-      href: '/access-control',
+      href: tenantId ? `/access-control?tenant=${encodeURIComponent(tenantId)}&status=PENDING` : '/access-control?status=PENDING',
       attention: (summary?.metrics.pendingAccessRequests ?? 0) > 0,
-    },
+    } satisfies DashboardMetric] : []),
   ];
+  const metrics: DashboardMetric[] = adminMetrics;
 
+  const accessControlPath = tenantId ? `/access-control?tenant=${encodeURIComponent(tenantId)}&status=PENDING` : '/access-control?status=PENDING';
   const actions = isSuperAdmin
-    ? [{ label: 'dashboard.reviewAccess', to: '/access-control', icon: Clock3 }]
-    : isProjectUser ? [] : [
+    ? [{ label: 'dashboard.reviewAccess', to: accessControlPath, icon: Clock3 }]
+    : isWorkspaceMember ? [] : [
       { label: 'dashboard.createProject', to: '/projects', icon: FolderKanban },
       { label: 'dashboard.manageUsers', to: '/users', icon: Users },
+      ...(canReviewAccess ? [{ label: 'dashboard.reviewAccess', to: accessControlPath, icon: Clock3 }] : []),
     ];
+
+  if (!hasDashboardAccess) return <Navigate to="/projects" replace />;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={t('dashboard.title')}
-        description={t(isSuperAdmin ? 'dashboard.superDescription' : isProjectUser ? 'dashboard.userDescription' : 'dashboard.clientDescription')}
-        action={!isProjectUser ? <div className="max-w-full overflow-x-auto pb-0.5"><DashboardRangeSelector value={range} onChange={setRange} /></div> : undefined}
+        description={t(isSuperAdmin ? 'dashboard.superDescription' : isWorkspaceMember ? 'dashboard.userDescription' : 'dashboard.clientDescription')}
+        action={<div className="max-w-full overflow-x-auto pb-0.5"><DashboardRangeSelector value={range} onChange={setRange} /></div>}
       />
+      <ScopeSelector />
 
       {query.status === 'error' ? <div className="rounded-lg border bg-card"><ErrorState onRetry={query.retry} /></div> : (
         <>
           <DashboardMetrics items={metrics} label={t('dashboard.keyIndicators')} />
 
-          {!isProjectUser ? (
-            query.status === 'loading' ? (
-              <DashboardTrendChartSkeleton title={t('dashboard.creationTrend')} description={t('dashboard.creationTrendDescription', { period: rangeLabel })} />
-            ) : (
-              <DashboardTrendChart
-                points={query.data.series}
-                bucket={query.data.bucket}
-                locale={i18n.language}
-                title={t('dashboard.creationTrend')}
-                description={t('dashboard.creationTrendDescription', { period: rangeLabel })}
-                projectsLabel={t('dashboard.projectsCreated')}
-                personasLabel={t('dashboard.personasCreated')}
-                emptyLabel={t('dashboard.noCreationData')}
-                tableCaption={t('dashboard.creationTrendTable')}
-              />
-            )
-          ) : null}
+          {query.status === 'loading' ? (
+            <DashboardTrendChartSkeleton title={t('dashboard.creationTrend')} description={t('dashboard.creationTrendDescription', { period: rangeLabel })} />
+          ) : (
+            <DashboardTrendChart
+              points={query.data.series}
+              bucket={query.data.bucket}
+              locale={i18n.language}
+              title={t('dashboard.creationTrend')}
+              description={t('dashboard.creationTrendDescription', { period: rangeLabel })}
+              projectsLabel={t('dashboard.projectsCreated')}
+              personasLabel={t('dashboard.personasCreated')}
+              emptyLabel={t('dashboard.noCreationData')}
+              tableCaption={t('dashboard.creationTrendTable')}
+            />
+          )}
 
           <div className={actions.length ? 'grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]' : 'grid gap-6'}>
             <section className="overflow-hidden rounded-lg border bg-card">

@@ -34,14 +34,17 @@ export function ProjectsPage() {
   const items = useMemo(() => query.status === 'success' ? query.data.filter((project) => (!workspaceId || project.workspaceId === undefined || project.workspaceId === workspaceId) && project.name.toLowerCase().includes(search.toLowerCase())) : [], [query, search, workspaceId]);
   const currentWorkspace = auth.activeContext?.workspaces.find((workspace) => workspace.id === workspaceId);
   const personaPermission = currentWorkspace?.permissions.find((permission) => permission.feature === 'PERSONA');
-  const canCreate = ['SUPER_ADMIN', 'CLIENT_ADMIN', 'WORKSPACE_ADMIN'].includes(auth.effectiveRole ?? '') || (personaPermission?.effect === 'ALLOW' && ['WRITE', 'ADMIN'].includes(personaPermission.level));
+  const isTenantLevelAdmin = ['SUPER_ADMIN', 'CLIENT_ADMIN'].includes(auth.effectiveRole ?? '');
+  const canCreate = isTenantLevelAdmin || currentWorkspace?.role === 'WORKSPACE_ADMIN' || (personaPermission?.effect === 'ALLOW' && ['WRITE', 'ADMIN'].includes(personaPermission.level));
+  const creatableWorkspaceIds = new Set(auth.activeContext?.workspaces.filter((workspace) => workspace.role === 'WORKSPACE_ADMIN' || workspace.permissions.some((permission) => permission.feature === 'PERSONA' && permission.effect === 'ALLOW' && ['WRITE', 'ADMIN'].includes(permission.level))).map((workspace) => workspace.id) ?? []);
+  const creatableWorkspaces = workspacesQuery.status === 'success' ? workspacesQuery.data.filter((workspace) => isTenantLevelAdmin || creatableWorkspaceIds.has(workspace.id)) : [];
 
   useEffect(() => { document.title = `${t('projects.title')} · ${t('common.appName')}`; }, [t]);
   return (
     <div className="space-y-6">
-      <PageHeader title={t('projects.title')} description={t('projects.description')} action={<Button onClick={() => setCreating(true)} disabled={!tenantId || !canCreate || workspacesQuery.status !== 'success' || workspacesQuery.data.length === 0}><Plus />{t('projects.create')}</Button>} />
+      <PageHeader title={t('projects.title')} description={t('projects.description')} action={<Button onClick={() => setCreating(true)} disabled={!tenantId || !canCreate || workspacesQuery.status !== 'success' || creatableWorkspaces.length === 0}><Plus />{t('projects.create')}</Button>} />
       <ScopeSelector />
-      {creating && workspacesQuery.status === 'success' ? <InlineForm title={t('forms.createProjectTitle')} description={t('forms.createProjectDescription')} onClose={() => setCreating(false)}><CreateProjectForm workspaces={workspacesQuery.data} defaultWorkspaceId={workspaceId} onCancel={() => setCreating(false)} onCreated={() => { setCreating(false); toast.success(t('forms.created')); query.retry(); }} /></InlineForm> : null}
+      {creating && workspacesQuery.status === 'success' ? <InlineForm title={t('forms.createProjectTitle')} description={t('forms.createProjectDescription')} onClose={() => setCreating(false)}><CreateProjectForm workspaces={creatableWorkspaces} defaultWorkspaceId={workspaceId} onCancel={() => setCreating(false)} onCreated={() => { setCreating(false); toast.success(t('forms.created')); query.retry(); }} /></InlineForm> : null}
       <DataRegion toolbar={<SearchField value={search} onChange={setSearch} placeholder={t('projects.search')} />}>
         {!tenantId ? <EmptyState title={t('context.selectClient')} description={t('context.selectClientDescription')} /> : query.status === 'loading' ? <LoadingRows /> : query.status === 'error' ? <ErrorState onRetry={query.retry} /> : items.length === 0 ? <EmptyState title={search ? t('common.noResults') : t('projects.empty')} description={t('projects.emptyDescription')} /> : (
           <ul className="divide-y">{items.map((project) => (

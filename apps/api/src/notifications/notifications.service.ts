@@ -61,9 +61,10 @@ export class NotificationsService {
   }
 
   async list(actor: Principal) {
+    const authorized = await this.authorizedWhere(actor);
     const [items, unreadCount] = await Promise.all([
       this.prisma.notification.findMany({
-        where: { recipientId: actor.id },
+        where: authorized,
         select: {
           id: true,
           tenantId: true,
@@ -77,14 +78,15 @@ export class NotificationsService {
         orderBy: { createdAt: 'desc' },
         take: 30,
       }),
-      this.prisma.notification.count({ where: { recipientId: actor.id, readAt: null } }),
+      this.prisma.notification.count({ where: { ...authorized, readAt: null } }),
     ]);
     return { items, unreadCount };
   }
 
   async markRead(id: string, actor: Principal) {
+    const authorized = await this.authorizedWhere(actor);
     const updated = await this.prisma.notification.updateMany({
-      where: { id, recipientId: actor.id },
+      where: { ...authorized, id },
       data: { readAt: new Date() },
     });
     if (updated.count !== 1) throw new NotFoundException('Notificação não encontrada.');
@@ -92,10 +94,26 @@ export class NotificationsService {
   }
 
   async markAllRead(actor: Principal) {
+    const authorized = await this.authorizedWhere(actor);
     const updated = await this.prisma.notification.updateMany({
-      where: { recipientId: actor.id, readAt: null },
+      where: { ...authorized, readAt: null },
       data: { readAt: new Date() },
     });
     return { updated: updated.count };
+  }
+
+  private async authorizedWhere(actor: Principal): Promise<Prisma.NotificationWhereInput> {
+    if (actor.role === Role.SUPER_ADMIN) return { recipientId: actor.id };
+    const memberships = await this.prisma.clientMembership.findMany({
+      where: {
+        userId: actor.id, role: ClientRole.CLIENT_ADMIN, status: MembershipStatus.ACTIVE,
+        tenant: { status: RecordStatus.ACTIVE },
+      },
+      select: { tenantId: true },
+    });
+    return {
+      recipientId: actor.id,
+      OR: [{ tenantId: null }, { tenantId: { in: memberships.map(({ tenantId }) => tenantId) } }],
+    };
   }
 }

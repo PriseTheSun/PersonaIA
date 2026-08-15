@@ -4,6 +4,8 @@ export const dashboardRangeSchema = z.enum(['7d', '30d', '12m', '5y']).default('
 
 export const dashboardQuerySchema = z.object({
   range: dashboardRangeSchema,
+  tenantId: z.string().uuid().optional(),
+  workspaceId: z.string().uuid().optional(),
 }).strict();
 
 export type DashboardRange = z.infer<typeof dashboardRangeSchema>;

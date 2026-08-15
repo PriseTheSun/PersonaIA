@@ -12,8 +12,8 @@ Escopo: `/register`, app shell e código das rotas `/workspaces`, `/projects`,
 | Performance | 3/4 | rotas lazy, consultas abortáveis e listas simples; associações múltiplas disparam mutações paralelas sem coordenação |
 | Responsividade | 4/4 | 320×480 real sem overflow; estruturas viram coluna e listas substituem tabelas rígidas |
 | Theming | 4/4 | tokens OKLCH consistentes, claro/escuro e reduced motion global |
-| Anti-patterns | 3/4 | produto visualmente contido e consistente; entrada manual de UUID reinventa seleção de usuário |
-| **Total** | **17/20** | **Bom — corrigir bloqueio de jornada antes do release** |
+| Anti-patterns | 4/4 | produto contido e consistente; inclusão usa pessoas elegíveis ou e-mail exato sem enumerar identidades globais |
+| **Total** | **18/20** | **Bom — jornada principal desbloqueada; fechar riscos P2 antes do release** |
 
 ## Verificações executadas
 
@@ -26,19 +26,18 @@ Escopo: `/register`, app shell e código das rotas `/workspaces`, `/projects`,
 - `prefers-reduced-motion` reduz animações e transições globalmente.
 - i18n automatizado: 4/4 PASS para paridade de chaves, placeholders e vocabulário
   crítico em `pt-BR`, `es` e `en`.
-- Frontend reportado pelo agente FRONT: 29/29 testes, lint sem warning e build OK.
+- Frontend validado após a correção: 31/31 testes, lint sem warning, build OK e
+  paridade i18n 4/4.
 
 ## Achados
 
-### [P1] Inclusão de usuário exige UUID digitado manualmente
+### [Resolvido] Inclusão de usuário não exige UUID digitado
 
 - Local: `features/users/users-page.tsx`, `MembershipForm`.
-- Impacto: o administrador não vê nem conhece o UUID global, portanto o UC-03 não
-  é concluível em poucos cliques e pode induzir erro de pessoa.
-- Recomendação: ao adicionar a workspace, listar os vínculos ativos do cliente com
-  nome/e-mail e enviar o ID selecionado. Ao adicionar ao cliente, oferecer busca
-  exata por e-mail autorizada, sem endpoint de enumeração global para CLIENT_ADMIN.
-- Comando sugerido: `$impeccable harden`.
+- Evidência: workspace oferece select apenas de memberships `ACTIVE` do cliente,
+  com nome/e-mail; inclusão no cliente usa e-mail exato; permissões iniciais são
+  definidas no mesmo fluxo.
+- Resultado: UC-03 passa a ser concluível sem conhecer identificadores internos.
 
 ### [P2] Exclusão do workspace padrão é oferecida embora sempre falhe
 
@@ -80,6 +79,6 @@ Escopo: `/register`, app shell e código das rotas `/workspaces`, `/projects`,
 
 ## Gate
 
-O frontend visual está apto para integração, mas o P1 de seleção de usuário bloqueia
-o aceite de facilidade operacional. Após a correção, rodar `$impeccable polish` e
-repetir esta auditoria com sessão autenticada.
+O frontend visual está apto para integração e o bloqueio de seleção foi resolvido.
+Os P2 de atomicidade da associação, ação impossível no workspace padrão e evidência
+WCAG autenticada permanecem no gate de acabamento.

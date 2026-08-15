@@ -4,12 +4,15 @@
   "loginIntervalMs": 12500,
   "credentials": {
     "superAdmin": { "email": "qa-super@example.test", "password": "REPLACE_ME" },
+    "superAdmin2": { "email": "qa-super-2@example.test", "password": "REPLACE_ME" },
     "clientAdminA": { "email": "qa-admin-a@example.test", "password": "REPLACE_ME" },
     "clientAdminA2": { "email": "qa-admin-a2@example.test", "password": "REPLACE_ME" },
     "clientAdminB": { "email": "qa-admin-b@example.test", "password": "REPLACE_ME" },
     "workspaceMemberA": { "email": "qa-member-a@example.test", "password": "REPLACE_ME" },
     "revocableMemberA": { "email": "qa-revocable-a@example.test", "password": "REPLACE_ME" },
     "denyMemberA": { "email": "qa-deny-a@example.test", "password": "REPLACE_ME" },
+    "noAssetReadMemberA": { "email": "qa-no-asset-read-a@example.test", "password": "REPLACE_ME" },
+    "limitedAssetReadMemberA": { "email": "qa-limited-asset-read-a@example.test", "password": "REPLACE_ME" },
     "multiClientUser": { "email": "qa-multi@example.test", "password": "REPLACE_ME" },
     "existingIdentityNotInB": {
       "email": "qa-existing@example.test",
@@ -51,11 +54,16 @@
     "questionnaireA": "00000000-0000-4000-8000-0000000003a1",
     "questionnaireB": "00000000-0000-4000-8000-0000000003b1",
     "revocableMemberA": "00000000-0000-4000-8000-0000000004a1",
-    "workspaceMemberA": "00000000-0000-4000-8000-0000000004a2"
+    "workspaceMemberA": "00000000-0000-4000-8000-0000000004a2",
+    "clientAdminA2": "00000000-0000-4000-8000-0000000004a3",
+    "superAdmin2": "00000000-0000-4000-8000-000000000610"
   },
   "sentinels": {
     "tenantA": "QA_SENTINEL_TENANT_A",
     "tenantB": "QA_SENTINEL_TENANT_B"
+  },
+  "expected": {
+    "authorizedPersonaUsageCount": 1
   },
   "probes": {
     "denyPersona": {

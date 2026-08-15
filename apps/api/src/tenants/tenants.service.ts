@@ -16,6 +16,7 @@ export class TenantsService {
 
   async listTenants() {
     const tenants = await this.prisma.tenant.findMany({
+      where: { status: { not: RecordStatus.REMOVED } },
       orderBy: { createdAt: 'desc' },
       include: {
         _count: {
@@ -93,6 +94,7 @@ export class TenantsService {
           data: {
             tenantId: tenant.id, workspaceId: workspace.id, userId: admin.id,
             role: WorkspaceRole.WORKSPACE_ADMIN, status: MembershipStatus.ACTIVE,
+            inheritedFromClientAdmin: true,
           },
         });
         await tx.auditLog.create({
@@ -188,6 +190,7 @@ export class TenantsService {
           data: workspaces.map(({ id: workspaceId }) => ({
             tenantId: tenant.id, workspaceId, userId: user.id,
             role: WorkspaceRole.WORKSPACE_ADMIN, status: MembershipStatus.ACTIVE,
+            inheritedFromClientAdmin: true,
           })),
           skipDuplicates: true,
         });

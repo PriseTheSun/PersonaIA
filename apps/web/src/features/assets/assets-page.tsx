@@ -44,7 +44,7 @@ export function AssetsPage({ kind }: { kind: AssetKind }) {
   const responseSchema = useMemo(() => z.union([z.array(kind === 'personas' ? personaSchema : questionnaireSchema), paginatedSchema(kind === 'personas' ? personaSchema : questionnaireSchema)]).transform((value) => Array.isArray(value) ? value : value.items), [kind]);
   const query = useApiQuery((signal) => tenantId && hasFeatureAccess && (isTenantAdmin || workspaceId) ? apiRequest(`/tenants/${encodeURIComponent(tenantId)}/${kind}${workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : ''}`, responseSchema, { signal }) : Promise.resolve([] as Asset[]), [tenantId, workspaceId, kind, hasFeatureAccess, isTenantAdmin]);
   const currentContext = auth.activeContext;
-  const scopedWorkspaces = currentContext && currentContext.tenantId === tenantId ? currentContext.workspaces.filter((workspace) => !canAssociate || workspace.role === 'WORKSPACE_ADMIN') : [];
+  const scopedWorkspaces = currentContext && currentContext.tenantId === tenantId ? currentContext.workspaces.filter((workspace) => workspace.id === workspaceId && (!canAssociate || workspace.role === 'WORKSPACE_ADMIN')) : [];
   const workspacesQuery = useApiQuery((signal) => !tenantId ? Promise.resolve([]) : isTenantAdmin ? apiRequest(`/tenants/${encodeURIComponent(tenantId)}/workspaces`, workspaceResponseSchema, { signal }) : Promise.resolve(scopedWorkspaces.map((workspace) => workspaceSchema.parse({ id: workspace.id, tenantId, name: workspace.name, status: workspace.status === 'ACTIVE' ? 'ACTIVE' : 'SUSPENDED' }))), [tenantId, isTenantAdmin, canAssociate, scopedWorkspaces.map((workspace) => workspace.id).join('|')]);
   const items = useMemo(() => query.status === 'success' ? (query.data as Asset[]).filter((asset) => {
     const workspaceIds = getWorkspaceIds(asset);
@@ -74,12 +74,12 @@ export function AssetsPage({ kind }: { kind: AssetKind }) {
     <div className="space-y-6">
       <PageHeader title={t(`${labelKey}.title`)} description={t(`${labelKey}.description`)} action={<Button onClick={() => { setCreating(true); setEditingId(null); }} disabled={!tenantId || !canWrite}><Plus />{t(`${labelKey}.create`)}</Button>} />
       <ScopeSelector />
-      {creating && tenantId ? <InlineForm title={t(`${labelKey}.createTitle`)} description={t(`${labelKey}.createDescription`)} onClose={() => setCreating(false)}><AssetForm path={`/tenants/${encodeURIComponent(tenantId)}/${kind}`} submitLabel={t(`${labelKey}.create`)} onCancel={() => setCreating(false)} onSaved={() => { setCreating(false); toast.success(t('forms.created')); query.retry(); }} /></InlineForm> : null}
+      {creating && tenantId ? <InlineForm title={t(`${labelKey}.createTitle`)} description={t(`${labelKey}.createDescription`)} onClose={() => setCreating(false)}><AssetForm path={`/tenants/${encodeURIComponent(tenantId)}/${kind}`} extraBody={{ workspaceIds: workspaceId ? [workspaceId] : [] }} submitLabel={t(`${labelKey}.create`)} onCancel={() => setCreating(false)} onSaved={() => { setCreating(false); toast.success(t('forms.created')); query.retry(); }} /></InlineForm> : null}
       {editing && tenantId ? <InlineForm title={t(`${labelKey}.editTitle`, { name: editing.name })} description={t(`${labelKey}.editDescription`)} onClose={() => setEditingId(null)}><AssetForm path={`/tenants/${encodeURIComponent(tenantId)}/${kind}/${encodeURIComponent(editing.id)}`} initial={{ name: editing.name, description: editing.description ?? '' }} submitLabel={t('common.save')} onCancel={() => setEditingId(null)} onSaved={() => { setEditingId(null); toast.success(t(`${labelKey}.updated`)); query.retry(); }} /></InlineForm> : null}
       <DataRegion toolbar={<SearchField value={search} onChange={setSearch} placeholder={t(`${labelKey}.search`)} />}>
         {!tenantId ? <EmptyState title={t('context.selectClient')} description={t('context.selectClientDescription')} /> : !isTenantAdmin && !workspaceId ? <EmptyState title={t('context.selectWorkspace')} description={t('context.selectWorkspaceDescription')} /> : !hasFeatureAccess ? <EmptyState title={t('common.accessDenied')} description={t('forbidden.description')} /> : query.status === 'loading' || workspacesQuery.status === 'loading' ? <LoadingRows /> : query.status === 'error' ? <ErrorState onRetry={query.retry} /> : workspacesQuery.status === 'error' ? <ErrorState onRetry={workspacesQuery.retry} /> : items.length === 0 ? <EmptyState title={search ? t('common.noResults') : t(`${labelKey}.empty`)} description={t(workspaceId ? `${labelKey}.emptyWorkspaceDescription` : `${labelKey}.emptyDescription`)} /> : <ul className="divide-y">{items.map((asset) => <li key={asset.id}>
           <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:px-5"><span className="grid size-10 shrink-0 place-items-center rounded-md bg-secondary text-secondary-foreground"><Icon className="size-5" aria-hidden="true" /></span><div className="min-w-0 flex-1"><h2 className="truncate text-sm font-semibold">{asset.name}</h2><p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{asset.description || t(`${labelKey}.noDescription`)}</p><div className="mt-2 flex flex-wrap gap-1.5">{getWorkspaceNames(asset, workspacesQuery.data).map((name) => <span key={name} className="rounded-full bg-muted px-2 py-1 text-xs text-muted-foreground">{name}</span>)}{getWorkspaceIds(asset).length === 0 ? <span className="text-xs text-muted-foreground">{t(`${labelKey}.notAssociated`)}</span> : null}</div></div>{asset.activeProjectUsageCount > 0 ? <span className="flex items-center gap-1 text-xs text-muted-foreground"><LockKeyhole className="size-3.5" />{t(`${labelKey}.inUse`, { count: asset.activeProjectUsageCount })}</span> : null}<DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label={`${t('common.actions')}: ${asset.name}`}><MoreHorizontal /></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem disabled={!canWrite} onSelect={() => { setEditingId(asset.id); setCreating(false); }}><Pencil />{t('common.edit')}</DropdownMenuItem><DropdownMenuItem disabled={!canAssociate} onSelect={() => setAssociatingId(associatingId === asset.id ? null : asset.id)}><Link2 />{t(`${labelKey}.manageAssociations`)}</DropdownMenuItem><DropdownMenuSeparator /><ConfirmDialog title={t(`${labelKey}.deleteTitle`, { name: asset.name })} description={asset.activeProjectUsageCount > 0 ? t(`${labelKey}.deleteBlocked`) : t(`${labelKey}.deleteDescription`)} confirmLabel={t('common.delete')} destructive loading={deletingId === asset.id} onConfirm={() => void remove(asset)} trigger={<DropdownMenuItem disabled={!canDelete || asset.activeProjectUsageCount > 0} onSelect={(event) => event.preventDefault()} className="text-destructive"><Trash2 />{t('common.delete')}</DropdownMenuItem>} /></DropdownMenuContent></DropdownMenu></div>
-          {associatingId === asset.id ? <AssociationEditor tenantId={tenantId} kind={kind} asset={asset} workspaces={workspacesQuery.data} onClose={() => setAssociatingId(null)} onSaved={() => { setAssociatingId(null); query.retry(); }} /> : null}
+          {associatingId === asset.id ? <AssociationEditor tenantId={tenantId} kind={kind} asset={asset} workspaces={workspacesQuery.data} canReplaceAll={isTenantAdmin} onClose={() => setAssociatingId(null)} onSaved={() => { setAssociatingId(null); query.retry(); }} /> : null}
         </li>)}</ul>}
       </DataRegion>
     </div>
@@ -95,20 +95,24 @@ function getWorkspaceNames(asset: Asset, workspaces: Workspace[]) {
   return ids.map((id) => asset.workspaces.find((workspace) => workspace.id === id)?.name ?? workspaces.find((workspace) => workspace.id === id)?.name).filter((name): name is string => Boolean(name));
 }
 
-function AssociationEditor({ tenantId, kind, asset, workspaces, onClose, onSaved }: { tenantId: string; kind: AssetKind; asset: Asset; workspaces: Workspace[]; onClose: () => void; onSaved: () => void }) {
+function AssociationEditor({ tenantId, kind, asset, workspaces, canReplaceAll, onClose, onSaved }: { tenantId: string; kind: AssetKind; asset: Asset; workspaces: Workspace[]; canReplaceAll: boolean; onClose: () => void; onSaved: () => void }) {
   const { t } = useTranslation();
   const initial = getWorkspaceIds(asset);
   const [selected, setSelected] = useState(initial);
   const [saving, setSaving] = useState(false);
   const save = async () => {
     setSaving(true);
-    const added = selected.filter((id) => !initial.includes(id));
-    const removed = initial.filter((id) => !selected.includes(id));
     try {
-      await Promise.all([
-        ...added.map((workspaceId) => apiRequest(`/tenants/${encodeURIComponent(tenantId)}/${kind}/${encodeURIComponent(asset.id)}/workspaces/${encodeURIComponent(workspaceId)}`, z.unknown(), { method: 'POST', headers: csrfHeaders() })),
-        ...removed.map((workspaceId) => apiVoid(`/tenants/${encodeURIComponent(tenantId)}/${kind}/${encodeURIComponent(asset.id)}/workspaces/${encodeURIComponent(workspaceId)}`, { method: 'DELETE', headers: csrfHeaders() })),
-      ]);
+      const basePath = `/tenants/${encodeURIComponent(tenantId)}/${kind}/${encodeURIComponent(asset.id)}/workspaces`;
+      if (canReplaceAll) {
+        await apiRequest(basePath, z.unknown(), { method: 'PUT', headers: csrfHeaders(), body: { workspaceIds: selected } });
+      } else {
+        const [workspace] = workspaces;
+        if (workspace && selected.includes(workspace.id) !== initial.includes(workspace.id)) {
+          if (selected.includes(workspace.id)) await apiRequest(`${basePath}/${encodeURIComponent(workspace.id)}`, z.unknown(), { method: 'POST', headers: csrfHeaders() });
+          else await apiVoid(`${basePath}/${encodeURIComponent(workspace.id)}`, { method: 'DELETE', headers: csrfHeaders() });
+        }
+      }
       toast.success(t('assets.associationsSaved'));
       onSaved();
     } catch (cause) {

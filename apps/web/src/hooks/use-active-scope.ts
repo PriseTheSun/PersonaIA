@@ -6,10 +6,11 @@ import { setScopeContext } from '@/lib/api';
 export function useActiveScope() {
   const auth = useAuth();
   const [params, setParams] = useSearchParams();
+  const hasTenantParam = params.has('tenant');
   const tenantId = params.get('tenant') ?? auth.activeScope?.tenantId ?? (auth.status === 'authenticated' ? auth.user.tenantId ?? undefined : undefined);
   const requestedWorkspace = params.get('workspace');
   const tenantWide = requestedWorkspace === 'all';
-  const workspaceId = tenantWide ? undefined : requestedWorkspace ?? auth.activeScope?.workspaceId;
+  const workspaceId = tenantWide ? undefined : requestedWorkspace ?? (hasTenantParam ? undefined : auth.activeScope?.workspaceId);
 
   useEffect(() => {
     if (!tenantId) return;

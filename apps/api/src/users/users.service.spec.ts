@@ -1,73 +1,50 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { UsersService } from './users.service';
 
-describe('UsersService access control', () => {
-  const ownTenant = '10000000-0000-4000-8000-000000000001';
-  const foreignTenant = '20000000-0000-4000-8000-000000000002';
+describe('UsersService global identity access', () => {
   const targetId = '30000000-0000-4000-8000-000000000003';
-  const clientActor = { id: '40000000-0000-4000-8000-000000000004', tenantId: ownTenant, email: 'admin@test.dev', name: 'Admin', role: 'CLIENT_ADMIN' as const, tokenVersion: 0 };
+  const tenantId = '10000000-0000-4000-8000-000000000001';
+  const clientActor = { id: '40000000-0000-4000-8000-000000000004', tenantId, email: 'admin@test.dev', name: 'Admin', role: 'CLIENT_ADMIN' as const, tokenVersion: 0 };
   const superActor = { ...clientActor, id: '50000000-0000-4000-8000-000000000005', tenantId: null, role: 'SUPER_ADMIN' as const };
 
-  it('hides a cross-tenant target from a client administrator', async () => {
-    const prisma = { user: { findUnique: jest.fn().mockResolvedValue({ id: targetId, tenantId: foreignTenant, role: 'PROJECT_USER', status: 'PENDING' }) } };
-    const service = new UsersService(prisma as never, {} as never);
-    await expect(service.updateAccess(targetId, { status: 'ACTIVE' }, clientActor)).rejects.toBeInstanceOf(NotFoundException);
+  it('rejects scoped admins from the platform identity service', async () => {
+    const service = new UsersService({} as never);
+    await expect(service.listAccess(clientActor)).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it('prevents a client administrator from promoting a project user', async () => {
-    const prisma = { user: { findUnique: jest.fn().mockResolvedValue({ id: targetId, tenantId: ownTenant, role: 'PROJECT_USER', status: 'PENDING' }) } };
-    const service = new UsersService(prisma as never, {} as never);
-    await expect(service.updateAccess(targetId, { role: 'CLIENT_ADMIN' }, clientActor)).rejects.toBeInstanceOf(ForbiddenException);
-  });
-
-  it('clears project memberships and sessions when a super administrator grants platform access', async () => {
-    const existing = { id: targetId, tenantId: ownTenant, role: 'PROJECT_USER', status: 'PENDING', name: 'Pessoa', email: 'pessoa@test.dev' };
+  it('protects the last active super admin under a serialized transaction', async () => {
+    const existing = { id: targetId, tenantId: null, role: 'SUPER_ADMIN', status: 'ACTIVE', name: 'Super', email: 'super@test.dev' };
     const tx = {
-      projectMembership: { deleteMany: jest.fn().mockResolvedValue({ count: 2 }) },
-      user: { update: jest.fn().mockResolvedValue({ ...existing, tenantId: null, role: 'SUPER_ADMIN', status: 'ACTIVE' }) },
+      $executeRaw: jest.fn().mockResolvedValue(1),
+      user: { count: jest.fn().mockResolvedValue(1), update: jest.fn() },
+      refreshSession: { updateMany: jest.fn() }, auditLog: { create: jest.fn() },
+    };
+    const prisma = {
+      user: { findUnique: jest.fn().mockResolvedValue(existing) },
+      clientMembership: { findUnique: jest.fn().mockResolvedValue({ role: 'CLIENT_MEMBER', status: 'ACTIVE' }) },
+      $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx)),
+    };
+    const service = new UsersService(prisma as never);
+    await expect(service.updateAccess(targetId, { role: 'PROJECT_USER', tenantId }, superActor)).rejects.toBeInstanceOf(ConflictException);
+    expect(tx.user.update).not.toHaveBeenCalled();
+  });
+
+  it('changes the global context without deleting independent scoped memberships', async () => {
+    const existing = { id: targetId, tenantId, role: 'PROJECT_USER', status: 'ACTIVE', name: 'Pessoa', email: 'pessoa@test.dev' };
+    const tx = {
+      $executeRaw: jest.fn().mockResolvedValue(1),
+      user: { count: jest.fn(), update: jest.fn().mockResolvedValue({ ...existing, role: 'SUPER_ADMIN', tenantId: null }) },
       refreshSession: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
-      auditLog: { create: jest.fn().mockResolvedValue({}) }
+      auditLog: { create: jest.fn().mockResolvedValue({}) },
+      clientMembership: { deleteMany: jest.fn() },
     };
     const prisma = {
       user: { findUnique: jest.fn().mockResolvedValue(existing) },
-      tenant: { findFirst: jest.fn().mockResolvedValue({ id: ownTenant }) },
-      $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx))
+      $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx)),
     };
-    const notifications = { resolveAccessRequest: jest.fn().mockResolvedValue(undefined) };
-    const service = new UsersService(prisma as never, notifications as never);
-
+    const service = new UsersService(prisma as never);
     await service.updateAccess(targetId, { role: 'SUPER_ADMIN', status: 'ACTIVE', tenantId: null }, superActor);
-    expect(tx.projectMembership.deleteMany).toHaveBeenCalledWith({ where: { userId: targetId } });
-    expect(tx.refreshSession.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ userId: targetId }) }));
-    expect(notifications.resolveAccessRequest).toHaveBeenCalledWith(tx, targetId);
-    expect(tx.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'USER_ACCESS_APPROVED' }) }));
-  });
-
-  it('archives a pending request when an administrator rejects access', async () => {
-    const existing = { id: targetId, tenantId: ownTenant, role: 'PROJECT_USER', status: 'PENDING', name: 'Pessoa', email: 'pessoa@test.dev' };
-    const tx = {
-      projectMembership: { deleteMany: jest.fn().mockResolvedValue({ count: 0 }) },
-      user: { update: jest.fn().mockResolvedValue({ ...existing, status: 'ARCHIVED' }) },
-      refreshSession: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
-      auditLog: { create: jest.fn().mockResolvedValue({}) }
-    };
-    const prisma = {
-      user: { findUnique: jest.fn().mockResolvedValue(existing) },
-      tenant: { findFirst: jest.fn().mockResolvedValue({ id: ownTenant }) },
-      $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx))
-    };
-    const notifications = { resolveAccessRequest: jest.fn().mockResolvedValue(undefined) };
-    const service = new UsersService(prisma as never, notifications as never);
-
-    await service.updateAccess(targetId, { status: 'ARCHIVED' }, clientActor);
-
-    expect(tx.user.update).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: targetId },
-      data: expect.objectContaining({ status: 'ARCHIVED' })
-    }));
-    expect(notifications.resolveAccessRequest).toHaveBeenCalledWith(tx, targetId);
-    expect(tx.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ action: 'USER_ACCESS_REJECTED' })
-    }));
+    expect(tx.user.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ role: 'SUPER_ADMIN', tenantId: null }) }));
+    expect(tx.clientMembership.deleteMany).not.toHaveBeenCalled();
   });
 });

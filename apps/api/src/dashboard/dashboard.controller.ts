@@ -6,7 +6,7 @@ import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { DashboardQuery, dashboardQuerySchema } from './dashboard.schemas';
 import { DashboardService } from './dashboard.service';
 
-@Roles('SUPER_ADMIN', 'CLIENT_ADMIN', 'PROJECT_USER')
+@Roles('SUPER_ADMIN', 'CLIENT_ADMIN', 'WORKSPACE_ADMIN', 'WORKSPACE_MEMBER', 'PROJECT_USER')
 @Controller('dashboard')
 export class DashboardController {
   constructor(private readonly dashboard: DashboardService) {}
@@ -16,6 +16,6 @@ export class DashboardController {
     @CurrentUser() actor: Principal,
     @Query(new ZodValidationPipe(dashboardQuerySchema)) query: DashboardQuery
   ) {
-    return this.dashboard.summary(actor, query.range);
+    return this.dashboard.summary(actor, query);
   }
 }

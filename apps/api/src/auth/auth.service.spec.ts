@@ -11,7 +11,7 @@ describe('AuthService refresh reuse detection', () => {
         findUnique: jest.fn().mockResolvedValue({
           id: '10000000-0000-4000-8000-000000000001', familyId: '20000000-0000-4000-8000-000000000002', userId: '30000000-0000-4000-8000-000000000003',
           revokedAt: new Date(), expiresAt: new Date(Date.now() + 60_000),
-          user: { id: '30000000-0000-4000-8000-000000000003', tokenVersion: 0, status: 'ACTIVE', tenant: null }
+          user: { id: '30000000-0000-4000-8000-000000000003', tokenVersion: 0, status: 'ACTIVE', role: 'SUPER_ADMIN', clientMemberships: [] }
         }),
         updateMany
       },
@@ -33,11 +33,19 @@ describe('AuthService refresh reuse detection', () => {
 describe('AuthService account approval', () => {
   it('creates self-registrations as pending project users and audits the request', async () => {
     const tx = {
-      user: { create: jest.fn().mockResolvedValue({ id: '30000000-0000-4000-8000-000000000003' }) },
+      user: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({ id: '30000000-0000-4000-8000-000000000003' }),
+      },
+      clientMembership: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({}),
+      },
       auditLog: { create: jest.fn().mockResolvedValue({}) }
     };
     const prisma = {
       tenant: { findFirst: jest.fn().mockResolvedValue({ id: '10000000-0000-4000-8000-000000000001', name: 'Cliente Teste' }) },
+      user: { findUnique: jest.fn().mockResolvedValue(null) },
       $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx))
     };
     const notifications = { dispatchAccessRequest: jest.fn().mockResolvedValue(undefined) };
@@ -47,7 +55,7 @@ describe('AuthService account approval', () => {
       name: 'Pessoa Teste', email: 'Pessoa@Teste.dev', password: 'UmaSenha#MuitoForte2026', tenantSlug: 'cliente-teste'
     })).resolves.toEqual({ status: 'PENDING' });
     expect(tx.user.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({ email: 'pessoa@teste.dev', role: 'PROJECT_USER', status: 'PENDING' })
+      data: expect.objectContaining({ email: 'pessoa@teste.dev', role: 'PROJECT_USER', status: 'PENDING_APPROVAL' })
     }));
     expect(tx.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'USER_REGISTERED' }) }));
     expect(notifications.dispatchAccessRequest).toHaveBeenCalledWith(tx, {
@@ -65,7 +73,7 @@ describe('AuthService account approval', () => {
       user: { findUnique: jest.fn().mockResolvedValue({
         id: '30000000-0000-4000-8000-000000000003', tenantId: '10000000-0000-4000-8000-000000000001',
         name: 'Pessoa Teste', email: 'pessoa@teste.dev', passwordHash, role: 'PROJECT_USER', status: 'PENDING', tokenVersion: 0,
-        tenant: { status: 'ACTIVE' }
+        clientMemberships: []
       }) }
     };
     const service = new AuthService(prisma as never, {} as never, {} as never, {} as never);

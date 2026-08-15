@@ -12,7 +12,7 @@ vi.mock('@/lib/api', () => ({ apiRequest: vi.fn() }));
 
 const apiRequestMock = vi.mocked(apiRequest);
 
-function response(range: '7d' | '30d' | '12m' | '5y' = '30d', scope: Role = 'SUPER_ADMIN') {
+function response(range: '7d' | '30d' | '12m' | '5y' = '30d', scope: 'PLATFORM' | 'TENANT' | 'WORKSPACE' = 'PLATFORM') {
   return {
     scope,
     range,
@@ -24,7 +24,6 @@ function response(range: '7d' | '30d' | '12m' | '5y' = '30d', scope: Role = 'SUP
       personasCreated: 9,
       activeUsers: 23,
       pendingAccessRequests: 3,
-      ...(scope === 'PROJECT_USER' ? { accessibleProjects: 2 } : {}),
     },
     series: [
       { periodStart: '2026-08-14T00:00:00.000Z', projectsCreated: 1, personasCreated: 3 },
@@ -35,12 +34,18 @@ function response(range: '7d' | '30d' | '12m' | '5y' = '30d', scope: Role = 'SUP
 }
 
 function renderDashboard(role: Role = 'SUPER_ADMIN') {
+  const isMember = role === 'WORKSPACE_MEMBER' || role === 'PROJECT_USER';
   return render(
     <I18nProvider>
       <MemoryRouter>
         <AuthContext.Provider value={{
           status: 'authenticated',
           user: { id: 'user-1', name: 'Admin', email: 'admin@personaia.test', role, status: 'ACTIVE' },
+          ...(isMember ? {
+            activeScope: { tenantId: 'tenant-1', workspaceId: 'workspace-1' },
+            activeContext: { tenantId: 'tenant-1', tenantName: 'Client', status: 'ACTIVE' as const, workspaces: [{ id: 'workspace-1', name: 'Research', role: 'WORKSPACE_MEMBER' as const, status: 'ACTIVE' as const, permissions: [{ feature: 'DASHBOARD' as const, level: 'READ' as const, effect: 'ALLOW' as const }] }] },
+            effectiveRole: 'WORKSPACE_MEMBER' as const,
+          } : {}),
           login: vi.fn(), logout: vi.fn(), refresh: vi.fn(),
         }}>
           <DashboardPage />
@@ -56,6 +61,7 @@ describe('DashboardPage', () => {
     localStorage.setItem('personaia.locale', 'pt-BR');
     apiRequestMock.mockReset();
     apiRequestMock.mockImplementation((path) => {
+      if (path === '/tenants') return Promise.resolve([]) as never;
       const range = path.includes('12m') ? '12m' : path.includes('7d') ? '7d' : path.includes('5y') ? '5y' : '30d';
       return Promise.resolve(response(range)) as never;
     });
@@ -81,14 +87,16 @@ describe('DashboardPage', () => {
     expect(screen.getByRole('button', { name: '12 meses' })).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('keeps tenant-wide access indicators hidden from project users', async () => {
-    apiRequestMock.mockResolvedValue(response('30d', 'PROJECT_USER') as never);
-    renderDashboard('PROJECT_USER');
+  it('shows workspace analytics without client approval controls to a member with DASHBOARD READ', async () => {
+    apiRequestMock.mockResolvedValue(response('30d', 'WORKSPACE') as never);
+    renderDashboard('WORKSPACE_MEMBER');
 
     const indicators = await screen.findByRole('region', { name: 'Indicadores principais' });
-    expect(within(indicators).getByText('Projetos com acesso')).toBeInTheDocument();
-    expect(within(indicators).queryByText('Usuários ativos')).not.toBeInTheDocument();
+    expect(within(indicators).getByText('Projetos criados')).toBeInTheDocument();
+    expect(within(indicators).getByText('Personas criadas')).toBeInTheDocument();
+    expect(within(indicators).getByText('Usuários ativos')).toBeInTheDocument();
     expect(within(indicators).queryByText('Pedidos aguardando aprovação')).not.toBeInTheDocument();
-    expect(screen.queryByText('Evolução das criações')).not.toBeInTheDocument();
+    expect(screen.getByText('Evolução das criações')).toBeInTheDocument();
+    expect(screen.queryByText('Revisar solicitações de acesso')).not.toBeInTheDocument();
   });
 });

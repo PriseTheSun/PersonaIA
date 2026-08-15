@@ -270,18 +270,30 @@ A suíte específica da regra nova autentica usuários reais e cobre IDs cruzado
 mass assignment, estado pendente, identidade multicliente e revogação imediata:
 
 ```bash
-cp qa/spec-blackbox.config.example.json /tmp/personaia-spec-qa.json
-# Preencha somente com fixtures de um banco descartável.
-SPEC_QA_CONFIG=/tmp/personaia-spec-qa.json \
+# O nome do banco precisa terminar em _qa. A URL nunca pode apontar ao banco dev/prod.
+export QA_DATABASE_URL='postgresql://.../personaia_spec_qa?schema=public'
+DATABASE_URL="$QA_DATABASE_URL" npm run prisma:migrate -w @personaia/api
+
+# O seed recusa outro nome/schema e exige confirmação explícita. Ele reseta somente
+# as tabelas de aplicação desse banco isolado e gera config local mode 0600.
+PERSONAIA_QA_RESET=I_UNDERSTAND_THIS_ISOLATED_QA \
+QA_DATABASE_URL="$QA_DATABASE_URL" \
+node qa/seed-spec-fixtures.mjs
+
+# Inicie uma API separada apontando para QA_DATABASE_URL (o config usa porta 3101).
+SPEC_QA_CONFIG=qa/.tmp/spec-blackbox.config.json \
 node --test qa/spec-blackbox.test.mjs
 
 # Mutações são opt-in e nunca devem apontar para produção.
-RUN_MUTATING=1 SPEC_QA_CONFIG=/tmp/personaia-spec-qa.json \
+RUN_MUTATING=1 SPEC_QA_CONFIG=qa/.tmp/spec-blackbox.config.json \
 node --test qa/spec-blackbox.test.mjs
 ```
 
-O arquivo real de configuração contém credenciais e não deve ser salvo no repositório
-nem anexado à evidência.
+`qa/seed-spec-fixtures.mjs` cria tenants, workspaces, projetos, ativos, snapshots,
+identidades multicliente, grants/denies e fixtures de corrida determinísticas. O
+arquivo real de configuração fica sob `qa/.tmp/` ignorado pelo Git; não deve ser
+anexado à evidência. Rode o seed novamente antes de cada execução integral para
+restaurar o estado canônico.
 
 O runner serializa logins e, por padrão, aguarda `12.500 ms` entre tentativas para
 respeitar o rate limit real de 5/minuto. Em ambiente de QA cujo limitador tenha sido

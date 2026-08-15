@@ -24,7 +24,12 @@ async function bootstrap() {
   app.enableShutdownHooks();
 
   const origins = config.getOrThrow<string>('CORS_ORIGINS').split(',').map((item) => item.trim()).filter(Boolean);
-  app.enableCors({ origin: origins, credentials: true, methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'], allowedHeaders: ['Authorization', 'Content-Type', 'X-CSRF-Token'] });
+  app.enableCors({
+    origin: origins,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Authorization', 'Content-Type', 'X-CSRF-Token', 'X-Tenant-Id', 'X-Workspace-Id'],
+  });
 
   const port = config.getOrThrow<number>('PORT');
   await app.listen(port, '0.0.0.0');

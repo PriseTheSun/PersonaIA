@@ -48,4 +48,19 @@ describe('secure API client', () => {
     const { apiRequest, ApiError } = await import('./api');
     await expect(apiRequest('/summary', z.object({ count: z.number() }))).rejects.toBeInstanceOf(ApiError);
   });
+
+  it('sends the selected tenant and workspace only as authorization context', async () => {
+    vi.resetModules();
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { apiRequest, setScopeContext } = await import('./api');
+    setScopeContext({ tenantId: 'tenant-a', workspaceId: 'workspace-a' });
+
+    await apiRequest('/projects?workspaceId=workspace-a', z.object({ ok: z.boolean() }));
+
+    expect(fetchMock.mock.calls[0]?.[1]?.headers).toMatchObject({
+      'X-Tenant-Id': 'tenant-a',
+      'X-Workspace-Id': 'workspace-a',
+    });
+  });
 });

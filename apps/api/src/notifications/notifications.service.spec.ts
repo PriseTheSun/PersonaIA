@@ -6,13 +6,16 @@ describe('NotificationsService', () => {
   const targetId = '20000000-0000-4000-8000-000000000002';
 
   it('notifies every active super admin and only the active client admins of the request tenant', async () => {
-    const recipients = [
+    const superAdmins = [
       { id: '30000000-0000-4000-8000-000000000003' },
-      { id: '40000000-0000-4000-8000-000000000004' },
-      { id: '50000000-0000-4000-8000-000000000005' }
+    ];
+    const clientAdmins = [
+      { userId: '40000000-0000-4000-8000-000000000004' },
+      { userId: '50000000-0000-4000-8000-000000000005' },
     ];
     const tx = {
-      user: { findMany: jest.fn().mockResolvedValue(recipients) },
+      user: { findMany: jest.fn().mockResolvedValue(superAdmins) },
+      clientMembership: { findMany: jest.fn().mockResolvedValue(clientAdmins) },
       notification: { createMany: jest.fn().mockResolvedValue({ count: 3 }) }
     };
     const service = new NotificationsService({} as never);
@@ -26,17 +29,14 @@ describe('NotificationsService', () => {
     });
 
     expect(tx.user.findMany).toHaveBeenCalledWith({
-      where: {
-        status: 'ACTIVE',
-        OR: [
-          { role: 'SUPER_ADMIN' },
-          { role: 'CLIENT_ADMIN', tenantId }
-        ]
-      },
+      where: { status: 'ACTIVE', role: 'SUPER_ADMIN' },
       select: { id: true }
     });
+    expect(tx.clientMembership.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ tenantId, role: 'CLIENT_ADMIN', status: 'ACTIVE' }),
+    }));
     expect(tx.notification.createMany).toHaveBeenCalledWith({
-      data: recipients.map(({ id: recipientId }) => ({
+      data: [...superAdmins.map(({ id }) => id), ...clientAdmins.map(({ userId }) => userId)].map((recipientId) => ({
         recipientId,
         tenantId,
         type: 'ACCESS_REQUESTED',

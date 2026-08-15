@@ -70,7 +70,9 @@ export function NotificationsMenu() {
         toast.error(t('notifications.updateError'));
       }
     }
-    navigate(notification.resolvedAt ? '/access-control?status=ALL' : '/access-control?status=PENDING');
+    const next = new URLSearchParams({ status: notification.resolvedAt ? 'ALL' : 'PENDING' });
+    if (notification.tenantId) next.set('tenant', notification.tenantId);
+    navigate(`/access-control?${next.toString()}`);
     await refresh();
   };
 

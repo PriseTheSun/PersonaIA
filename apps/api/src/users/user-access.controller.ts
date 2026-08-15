@@ -6,7 +6,7 @@ import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { updateUserAccessSchema, UpdateUserAccessInput } from './users.schemas';
 import { UsersService } from './users.service';
 
-@Roles('SUPER_ADMIN', 'CLIENT_ADMIN')
+@Roles('SUPER_ADMIN')
 @Controller('user-access')
 export class UserAccessController {
   constructor(private readonly users: UsersService) {}

@@ -12,19 +12,22 @@ describe('ProjectsService tenant isolation', () => {
       project: { findFirst: jest.fn().mockResolvedValue(null) },
       projectMembership: { findFirst: jest.fn() }
     };
-    const service = new ProjectsService(prisma as never);
+    const access = { requireProject: jest.fn().mockRejectedValue(new NotFoundException()) };
+    const service = new ProjectsService(prisma as never, access as never);
     await expect(service.updatePermission(foreignProject, foreignUser, { permission: 'VIEWER' }, actor)).rejects.toBeInstanceOf(NotFoundException);
-    expect(prisma.project.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: foreignProject, tenantId: ownTenant }) }));
+    expect(access.requireProject).toHaveBeenCalledWith(actor, foreignProject, true);
     expect(prisma.projectMembership.findFirst).not.toHaveBeenCalled();
   });
 
   it('blocks adding a valid user id belonging to another tenant', async () => {
     const prisma = {
-      project: { findFirst: jest.fn().mockResolvedValue({ id: foreignProject }) },
-      user: { findFirst: jest.fn().mockResolvedValue(null) }
+      workspaceMembership: { findUnique: jest.fn().mockResolvedValue(null) },
     };
-    const service = new ProjectsService(prisma as never);
+    const access = { requireProject: jest.fn().mockResolvedValue({ id: foreignProject, tenantId: ownTenant, workspaceId: '50000000-0000-4000-8000-000000000005' }) };
+    const service = new ProjectsService(prisma as never, access as never);
     await expect(service.addMember(foreignProject, { userId: foreignUser, permission: 'VIEWER' }, actor)).rejects.toBeInstanceOf(NotFoundException);
-    expect(prisma.user.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: foreignUser, tenantId: ownTenant }) }));
+    expect(prisma.workspaceMembership.findUnique).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ workspaceId_userId: expect.objectContaining({ userId: foreignUser }) }),
+    }));
   });
 });

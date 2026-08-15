@@ -88,11 +88,25 @@ export const userSchema = z.object({
 });
 export type User = z.infer<typeof userSchema>;
 
+export const platformIdentitySchema = userSchema.extend({
+  tenantId: z.string().nullable().optional(),
+  clientMemberships: z.array(z.object({
+    tenantId: z.string().min(1),
+    role: clientRoleSchema,
+    status: membershipStatusSchema,
+    tenant: z.object({ id: z.string(), name: z.string(), slug: z.string(), status: z.string().optional() }),
+  })).default([]),
+  membershipCount: z.number().int().nonnegative().default(0),
+  lastLoginAt: z.string().datetime().nullable().optional(),
+  updatedAt: z.string().datetime().optional(),
+});
+export type PlatformIdentity = z.infer<typeof platformIdentitySchema>;
+
 export const tenantSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
   slug: z.string().min(1),
-  status: z.enum(['ACTIVE', 'SUSPENDED']).default('ACTIVE'),
+  status: z.enum(['ACTIVE', 'SUSPENDED', 'ARCHIVED', 'REMOVED']).default('ACTIVE'),
   segment: z.string().nullable().optional(),
   description: z.string().nullable().optional(),
   adminCount: z.number().int().nonnegative().default(0),
@@ -179,7 +193,10 @@ const assetBaseSchema = z.object({
   description: z.string().nullable().optional(),
   status: z.enum(['ACTIVE', 'ARCHIVED']).default('ACTIVE'),
   workspaceIds: z.array(z.string()).default([]),
-  workspaces: z.array(z.object({ id: z.string(), name: z.string() })).default([]),
+  workspaces: z.array(z.union([
+    z.object({ id: z.string(), name: z.string() }),
+    z.object({ workspaceId: z.string(), workspace: z.object({ id: z.string(), name: z.string() }) }).transform((association) => association.workspace),
+  ])).default([]),
   activeProjectUsageCount: z.number().int().nonnegative().default(0),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
@@ -204,7 +221,7 @@ export const dashboardRangeSchema = z.enum(['7d', '30d', '12m', '5y']);
 export type DashboardRange = z.infer<typeof dashboardRangeSchema>;
 
 export const dashboardSummarySchema = z.object({
-  scope: roleSchema,
+  scope: z.enum(['PLATFORM', 'TENANT', 'WORKSPACE']),
   range: dashboardRangeSchema,
   bucket: z.enum(['day', 'month', 'year']),
   from: z.string().datetime(),

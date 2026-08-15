@@ -32,7 +32,7 @@ export class ClientMembershipsService {
       if (!workspaceAdmin) throw new NotFoundException('Cliente não encontrado.');
     }
     return this.prisma.clientMembership.findMany({
-      where: { tenantId, status: tenantAdmin ? { not: MembershipStatus.REMOVED } : MembershipStatus.ACTIVE },
+      where: { tenantId, ...(tenantAdmin ? {} : { status: MembershipStatus.ACTIVE }) },
       select: {
         id: true, tenantId: true, userId: true, role: true, status: true, createdAt: true, updatedAt: true,
         user: { select: { id: true, name: true, email: true, status: true, lastLoginAt: true } },
@@ -94,8 +94,14 @@ export class ClientMembershipsService {
         await this.activateIdentity(tx, userId, tenantId, nextRole);
       } else if (existing.status === MembershipStatus.ACTIVE) {
         await tx.workspaceMembership.updateMany({
-          where: { tenantId, userId, status: MembershipStatus.ACTIVE },
+          where: { tenantId, userId, inheritedFromClientAdmin: true, status: MembershipStatus.ACTIVE },
           data: { status: nextStatus === MembershipStatus.REMOVED ? MembershipStatus.REMOVED : MembershipStatus.SUSPENDED },
+        });
+      }
+      if (existing.role === ClientRole.CLIENT_ADMIN && nextRole === ClientRole.CLIENT_MEMBER) {
+        await tx.workspaceMembership.updateMany({
+          where: { tenantId, userId, inheritedFromClientAdmin: true },
+          data: { role: WorkspaceRole.WORKSPACE_MEMBER, inheritedFromClientAdmin: false },
         });
       }
       if (nextRole === ClientRole.CLIENT_ADMIN && nextStatus === MembershipStatus.ACTIVE) {
@@ -141,14 +147,21 @@ export class ClientMembershipsService {
   private async ensureWorkspaceAdminEverywhere(tx: Prisma.TransactionClient, tenantId: string, userId: string) {
     const workspaces = await tx.workspace.findMany({ where: { tenantId, status: RecordStatus.ACTIVE }, select: { id: true } });
     for (const workspace of workspaces) {
-      await tx.workspaceMembership.upsert({
+      const existing = await tx.workspaceMembership.findUnique({
         where: { workspaceId_userId: { workspaceId: workspace.id, userId } },
-        update: { role: WorkspaceRole.WORKSPACE_ADMIN, status: MembershipStatus.ACTIVE },
-        create: {
+      });
+      if (!existing) {
+        await tx.workspaceMembership.create({ data: {
           tenantId, workspaceId: workspace.id, userId,
           role: WorkspaceRole.WORKSPACE_ADMIN, status: MembershipStatus.ACTIVE,
-        },
-      });
+          inheritedFromClientAdmin: true,
+        } });
+      } else if (existing.role !== WorkspaceRole.WORKSPACE_ADMIN || existing.status !== MembershipStatus.ACTIVE) {
+        await tx.workspaceMembership.update({
+          where: { id: existing.id },
+          data: { role: WorkspaceRole.WORKSPACE_ADMIN, status: MembershipStatus.ACTIVE, inheritedFromClientAdmin: true },
+        });
+      }
     }
   }
 }

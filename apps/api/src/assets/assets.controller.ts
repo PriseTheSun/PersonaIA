@@ -1,9 +1,9 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Put, Query } from '@nestjs/common';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Principal } from '../common/types/principal';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
-import { AssetQuery, assetQuerySchema, createAssetSchema, CreateAssetInput, updateAssetSchema, UpdateAssetInput } from './assets.schemas';
+import { AssetQuery, assetQuerySchema, createAssetSchema, CreateAssetInput, replaceAssetWorkspacesSchema, ReplaceAssetWorkspacesInput, updateAssetSchema, UpdateAssetInput } from './assets.schemas';
 import { AssetsService } from './assets.service';
 
 const authenticated = ['SUPER_ADMIN', 'CLIENT_ADMIN', 'WORKSPACE_ADMIN', 'WORKSPACE_MEMBER', 'PROJECT_USER'] as const;
@@ -19,6 +19,7 @@ export class PersonasController {
   @Delete(':assetId') remove(@Param('tenantId', ParseUUIDPipe) tenantId: string, @Param('assetId', ParseUUIDPipe) assetId: string, @CurrentUser() actor: Principal) { return this.assets.remove('PERSONA', tenantId, assetId, actor); }
   @Post(':assetId/workspaces/:workspaceId') associate(@Param('tenantId', ParseUUIDPipe) tenantId: string, @Param('assetId', ParseUUIDPipe) assetId: string, @Param('workspaceId', ParseUUIDPipe) workspaceId: string, @CurrentUser() actor: Principal) { return this.assets.associate('PERSONA', tenantId, assetId, workspaceId, actor); }
   @Delete(':assetId/workspaces/:workspaceId') disassociate(@Param('tenantId', ParseUUIDPipe) tenantId: string, @Param('assetId', ParseUUIDPipe) assetId: string, @Param('workspaceId', ParseUUIDPipe) workspaceId: string, @CurrentUser() actor: Principal) { return this.assets.disassociate('PERSONA', tenantId, assetId, workspaceId, actor); }
+  @Put(':assetId/workspaces') replaceWorkspaces(@Param('tenantId', ParseUUIDPipe) tenantId: string, @Param('assetId', ParseUUIDPipe) assetId: string, @Body(new ZodValidationPipe(replaceAssetWorkspacesSchema)) input: ReplaceAssetWorkspacesInput, @CurrentUser() actor: Principal) { return this.assets.replaceAssociations('PERSONA', tenantId, assetId, input.workspaceIds, actor); }
 }
 
 @Roles(...authenticated)
@@ -32,6 +33,7 @@ export class QuestionnairesController {
   @Delete(':assetId') remove(@Param('tenantId', ParseUUIDPipe) tenantId: string, @Param('assetId', ParseUUIDPipe) assetId: string, @CurrentUser() actor: Principal) { return this.assets.remove('QUESTIONNAIRE', tenantId, assetId, actor); }
   @Post(':assetId/workspaces/:workspaceId') associate(@Param('tenantId', ParseUUIDPipe) tenantId: string, @Param('assetId', ParseUUIDPipe) assetId: string, @Param('workspaceId', ParseUUIDPipe) workspaceId: string, @CurrentUser() actor: Principal) { return this.assets.associate('QUESTIONNAIRE', tenantId, assetId, workspaceId, actor); }
   @Delete(':assetId/workspaces/:workspaceId') disassociate(@Param('tenantId', ParseUUIDPipe) tenantId: string, @Param('assetId', ParseUUIDPipe) assetId: string, @Param('workspaceId', ParseUUIDPipe) workspaceId: string, @CurrentUser() actor: Principal) { return this.assets.disassociate('QUESTIONNAIRE', tenantId, assetId, workspaceId, actor); }
+  @Put(':assetId/workspaces') replaceWorkspaces(@Param('tenantId', ParseUUIDPipe) tenantId: string, @Param('assetId', ParseUUIDPipe) assetId: string, @Body(new ZodValidationPipe(replaceAssetWorkspacesSchema)) input: ReplaceAssetWorkspacesInput, @CurrentUser() actor: Principal) { return this.assets.replaceAssociations('QUESTIONNAIRE', tenantId, assetId, input.workspaceIds, actor); }
 }
 
 @Roles(...authenticated)

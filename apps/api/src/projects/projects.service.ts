@@ -74,6 +74,11 @@ export class ProjectsService {
     });
     try {
       return await this.prisma.$transaction(async (tx) => {
+        await this.accessControl().lockWorkspace(tx, workspace.id);
+        const activeWorkspace = await tx.workspace.count({
+          where: { id: workspace.id, tenantId: workspace.tenantId, status: RecordStatus.ACTIVE, tenant: { status: RecordStatus.ACTIVE } },
+        });
+        if (!activeWorkspace) throw new NotFoundException('Workspace não encontrado.');
         const project = await tx.project.create({
           data: {
             tenantId: workspace.tenantId, workspaceId: workspace.id,
@@ -87,7 +92,7 @@ export class ProjectsService {
           },
         });
         return project;
-      });
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new ConflictException('Já existe um projeto com esse slug neste workspace.');
@@ -266,6 +271,9 @@ export class ProjectsService {
       this.accessControl().requireProject(actor, fromProjectId, true),
       this.accessControl().requireProject(actor, input.toProjectId, true),
     ]);
+    if (sourceProject.tenantId !== destinationProject.tenantId && !this.accessControl().isSuper(actor)) {
+      throw new BadRequestException('Movimentação de membro entre clientes não é permitida.');
+    }
     await this.requireWorkspaceUser(input.userId, destinationProject.tenantId, destinationProject.workspaceId);
     const source = await this.prisma.projectMembership.findFirst({
       where: { projectId: fromProjectId, userId: input.userId }, select: { id: true },

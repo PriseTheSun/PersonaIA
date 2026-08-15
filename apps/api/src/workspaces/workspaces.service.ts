@@ -79,6 +79,7 @@ export class WorkspacesService {
           data: admins.map(({ userId }) => ({
             tenantId, workspaceId: workspace.id, userId,
             role: WorkspaceRole.WORKSPACE_ADMIN, status: MembershipStatus.ACTIVE,
+            inheritedFromClientAdmin: true,
           })),
         });
         await tx.auditLog.create({
@@ -139,7 +140,7 @@ export class WorkspacesService {
   async listMembers(workspaceId: string, actor: Principal) {
     await this.access.requireWorkspace(actor, workspaceId, true);
     const members = await this.prisma.workspaceMembership.findMany({
-      where: { workspaceId, status: { not: MembershipStatus.REMOVED } },
+      where: { workspaceId },
       select: {
         id: true, tenantId: true, workspaceId: true, userId: true, role: true, status: true, createdAt: true, updatedAt: true,
         user: { select: { id: true, name: true, email: true, status: true, lastLoginAt: true } },
@@ -160,11 +161,14 @@ export class WorkspacesService {
     if (!clientMembership || clientMembership.status !== MembershipStatus.ACTIVE) {
       throw new NotFoundException('Usuário não possui vínculo ativo com o cliente.');
     }
+    if (clientMembership.role === ClientRole.CLIENT_ADMIN) {
+      throw new ConflictException('CLIENT_ADMIN já possui acesso administrativo automático ao workspace.');
+    }
     return this.prisma.$transaction(async (tx) => {
       const membership = await tx.workspaceMembership.upsert({
         where: { workspaceId_userId: { workspaceId, userId: input.userId } },
-        update: { role: input.role, status: input.status },
-        create: { tenantId: workspace.tenantId, workspaceId, userId: input.userId, role: input.role, status: input.status },
+        update: { role: input.role, status: input.status, inheritedFromClientAdmin: false },
+        create: { tenantId: workspace.tenantId, workspaceId, userId: input.userId, role: input.role, status: input.status, inheritedFromClientAdmin: false },
       });
       await this.replacePermissionsTx(tx, workspace.tenantId, workspaceId, input.userId, input.permissions);
       await tx.auditLog.create({
@@ -201,7 +205,10 @@ export class WorkspacesService {
         if (admins <= 1) throw new ConflictException('Mantenha pelo menos um WORKSPACE_ADMIN ativo.');
       }
       const membership = await tx.workspaceMembership.update({
-        where: { id: existing.id }, data: { ...(input.role ? { role: input.role } : {}), ...(input.status ? { status: input.status } : {}) },
+        where: { id: existing.id }, data: {
+          ...(input.role ? { role: input.role, inheritedFromClientAdmin: false } : {}),
+          ...(input.status ? { status: input.status } : {}),
+        },
       });
       await tx.auditLog.create({
         data: {
