@@ -15,6 +15,7 @@ function getTheme(): Theme {
 function applyTheme(theme: Theme) {
   const isDark = theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
   document.documentElement.classList.toggle('dark', isDark);
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', isDark ? '#0C1825' : '#F3F4F8');
   localStorage.setItem(KEY, theme);
 }
 

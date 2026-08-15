@@ -33,7 +33,7 @@ export function ErrorState({ onRetry, title, description }: { onRetry: () => voi
   const { t } = useTranslation();
   return (
     <div className="flex min-h-64 flex-col items-center justify-center px-5 py-12 text-center" role="alert">
-      <span className="mb-4 grid size-11 place-items-center rounded-full bg-foreground text-background"><AlertCircle className="size-5" aria-hidden="true" /></span>
+      <span className="mb-4 grid size-11 place-items-center rounded-full bg-secondary text-secondary-foreground"><AlertCircle className="size-5" aria-hidden="true" /></span>
       <h2 className="text-base font-semibold">{title ?? t('common.errorTitle')}</h2>
       <p className="mt-1 max-w-md text-sm leading-6 text-muted-foreground">{description ?? t('common.errorDescription')}</p>
       <Button variant="outline" className="mt-5" onClick={onRetry}><RefreshCcw aria-hidden="true" />{t('common.retry')}</Button>

@@ -57,7 +57,7 @@ export default {
         sm: 'calc(var(--radius) - 4px)',
       },
       boxShadow: {
-        sm: '0 4px 8px oklch(0.145 0 0 / 0.12)',
+        sm: '0 4px 8px oklch(0.2049 0.0313 251.40 / 0.12)',
       },
       zIndex: {
         dropdown: '65',

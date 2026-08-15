@@ -11,7 +11,7 @@ const buttonVariants = cva(
       variant: {
         default: 'bg-primary text-primary-foreground hover:bg-[oklch(var(--primary-hover))] active:bg-[oklch(var(--primary-hover))]',
         destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
-        outline: 'border bg-background hover:bg-muted active:bg-muted/80',
+        outline: 'border bg-card hover:bg-muted active:bg-muted/80',
         secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
         ghost: 'hover:bg-muted active:bg-muted/80',
         link: 'min-h-0 px-0 text-primary underline-offset-4 hover:underline',

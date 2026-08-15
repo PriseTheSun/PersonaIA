@@ -34,7 +34,7 @@ export function ProjectsPage() {
         {query.status === 'loading' ? <LoadingRows /> : query.status === 'error' ? <ErrorState onRetry={query.retry} /> : items.length === 0 ? <EmptyState title={search ? t('common.noResults') : t('projects.empty')} description={t('projects.emptyDescription')} /> : (
           <ul className="divide-y">{items.map((project) => (
             <li key={project.id} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:px-5">
-              <span className="grid size-10 shrink-0 place-items-center rounded-md bg-secondary"><FolderKanban className="size-5" aria-hidden="true" /></span>
+              <span className="grid size-10 shrink-0 place-items-center rounded-md bg-secondary text-secondary-foreground"><FolderKanban className="size-5" aria-hidden="true" /></span>
               <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h2 className="truncate text-sm font-semibold">{project.name}</h2><StatusBadge status={project.status} /></div><p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{project.description || t('projects.description')}</p></div>
               <div className="flex items-center justify-between gap-2 sm:justify-end"><span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Users className="size-3.5" aria-hidden="true" />{t('projects.memberCount', { count: project.memberCount })} · {formatDate(project.updatedAt, i18n.language)}</span><Button asChild variant="ghost" size="sm"><Link to={`/permissions?project=${encodeURIComponent(project.id)}`}>{t('projects.open')}<ArrowRight /></Link></Button></div>
             </li>

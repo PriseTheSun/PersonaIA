@@ -48,7 +48,7 @@ export function RegisterPage() {
   return (
     <main className="relative grid min-h-screen place-items-center bg-muted/50 px-4 py-16 sm:px-6">
       <div className="absolute right-3 top-3 flex items-center sm:right-6 sm:top-6"><LanguageSelector /><ThemeSelector /></div>
-      <section className="w-full max-w-[500px] rounded-lg border bg-background p-5 sm:p-8" aria-labelledby="register-title">
+      <section className="w-full max-w-[500px] rounded-lg border bg-card p-5 text-card-foreground sm:p-8" aria-labelledby="register-title">
         <AppLogo />
         {complete ? (
           <div className="py-8 text-center">
@@ -85,7 +85,7 @@ export function RegisterPage() {
                 </Field>
               </div>
               <p className="flex gap-2 text-xs leading-5 text-muted-foreground"><LockKeyhole className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />{t('forms.passwordHint')}</p>
-              {serverError ? <div className="rounded-md border border-foreground/40 bg-background px-3 py-2.5 text-sm text-foreground" role="alert">{serverError}</div> : null}
+              {serverError ? <div className="rounded-md border border-secondary/40 bg-card px-3 py-2.5 text-sm text-foreground" role="alert">{serverError}</div> : null}
               <Button type="submit" size="lg" className="w-full" loading={isSubmitting}>{isSubmitting ? t('registration.submitting') : t('registration.submit')} {!isSubmitting ? <ArrowRight aria-hidden="true" /> : null}</Button>
             </form>
             <p className="mt-6 text-center text-sm text-muted-foreground">{t('registration.alreadyHaveAccount')} <Link to="/login" className="font-medium text-primary hover:underline">{t('auth.submit')}</Link></p>
