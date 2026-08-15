@@ -1,10 +1,28 @@
+import type { CSSProperties } from 'react';
 import { cn } from '@/lib/utils';
+
+const logoSrc = '/brand/PersonaIA-logo.svg';
+const logoMaskStyle: CSSProperties = {
+  WebkitMaskImage: `url("${logoSrc}")`,
+  maskImage: `url("${logoSrc}")`,
+  WebkitMaskPosition: 'left center',
+  maskPosition: 'left center',
+  WebkitMaskRepeat: 'no-repeat',
+  maskRepeat: 'no-repeat',
+  WebkitMaskSize: 'auto 100%',
+  maskSize: 'auto 100%',
+};
 
 export function AppLogo({ compact = false, className }: { compact?: boolean; className?: string }) {
   return (
-    <div className={cn('flex items-center gap-2.5', className)} aria-label="PersonaIA">
-      <div className="grid size-8 shrink-0 place-items-center rounded-md bg-primary text-sm font-semibold text-primary-foreground" aria-hidden="true">P</div>
-      {!compact ? <span className="text-sm font-semibold tracking-[-0.015em]">PersonaIA</span> : null}
-    </div>
+    <span className={cn('inline-flex shrink-0 items-center', className)} role="img" aria-label="PersonaIA">
+      {compact ? (
+        <span className="block h-10 w-7 overflow-hidden" aria-hidden="true">
+          <span className="block h-10 w-[158px] bg-primary" style={logoMaskStyle} />
+        </span>
+      ) : (
+        <span className="block h-12 w-[190px] bg-primary" style={logoMaskStyle} aria-hidden="true" />
+      )}
+    </span>
   );
 }

@@ -9,7 +9,7 @@ import { hashToken, normalizeEmail, redactUser } from '../common/security';
 import { LoginInput, RegisterInput } from './auth.schemas';
 
 interface SessionContext { userAgent?: string; ipAddress?: string }
-interface RefreshPayload { sub: string; sid: string; fid: string; type: 'refresh'; ver: number }
+interface RefreshPayload { sub: string; sid: string; fid: string; type: 'refresh'; ver: number; rem?: boolean }
 
 @Injectable()
 export class AuthService {
@@ -70,7 +70,7 @@ export class AuthService {
       throw new ForbiddenException({ code: 'ACCOUNT_INACTIVE', message: 'Conta inativa.' });
     }
     await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
-    const tokens = await this.issueSession(user, context);
+    const tokens = await this.issueSession(user, context, input.rememberMe === true);
     return { ...tokens, user: redactUser(user) };
   }
 
@@ -103,7 +103,8 @@ export class AuthService {
     }
 
     const nextId = randomUUID();
-    const refreshToken = await this.signRefresh(user.id, nextId, session.familyId, user.tokenVersion);
+    const rememberMe = payload.rem === true;
+    const refreshToken = await this.signRefresh(user.id, nextId, session.familyId, user.tokenVersion, rememberMe);
     const expiresAt = this.refreshExpiry();
     const rotated = await this.prisma.$transaction(async (tx) => {
       const consumed = await tx.refreshSession.updateMany({
@@ -123,7 +124,7 @@ export class AuthService {
       await this.revokeFamily(session.familyId, user.id);
       throw new UnauthorizedException('Reutilização de sessão detectada. Faça login novamente.');
     }
-    return { accessToken: await this.signAccess(user), refreshToken, expiresIn: this.config.getOrThrow<string>('JWT_ACCESS_TTL') };
+    return { accessToken: await this.signAccess(user), refreshToken, expiresIn: this.config.getOrThrow<string>('JWT_ACCESS_TTL'), rememberMe };
   }
 
   async logout(rawToken?: string) {
@@ -131,17 +132,17 @@ export class AuthService {
     await this.prisma.refreshSession.updateMany({ where: { tokenHash: hashToken(rawToken), revokedAt: null }, data: { revokedAt: new Date() } });
   }
 
-  private async issueSession(user: { id: string; tokenVersion: number; tenantId: string | null; role: string }, context: SessionContext) {
+  private async issueSession(user: { id: string; tokenVersion: number; tenantId: string | null; role: string }, context: SessionContext, rememberMe: boolean) {
     const id = randomUUID();
     const familyId = randomUUID();
-    const refreshToken = await this.signRefresh(user.id, id, familyId, user.tokenVersion);
+    const refreshToken = await this.signRefresh(user.id, id, familyId, user.tokenVersion, rememberMe);
     await this.prisma.refreshSession.create({
       data: {
         id, familyId, userId: user.id, tokenHash: hashToken(refreshToken), expiresAt: this.refreshExpiry(),
         userAgent: context.userAgent?.slice(0, 300), ipAddress: context.ipAddress?.slice(0, 64)
       }
     });
-    return { accessToken: await this.signAccess(user), refreshToken, expiresIn: this.config.getOrThrow<string>('JWT_ACCESS_TTL') };
+    return { accessToken: await this.signAccess(user), refreshToken, expiresIn: this.config.getOrThrow<string>('JWT_ACCESS_TTL'), rememberMe };
   }
 
   private signAccess(user: { id: string; tokenVersion: number; tenantId: string | null; role: string }) {
@@ -154,9 +155,9 @@ export class AuthService {
     );
   }
 
-  private signRefresh(userId: string, sessionId: string, familyId: string, version: number) {
+  private signRefresh(userId: string, sessionId: string, familyId: string, version: number, rememberMe: boolean) {
     return this.jwt.signAsync(
-      { sub: userId, sid: sessionId, fid: familyId, type: 'refresh', ver: version },
+      { sub: userId, sid: sessionId, fid: familyId, type: 'refresh', ver: version, rem: rememberMe },
       {
         secret: this.config.getOrThrow('JWT_REFRESH_SECRET'), algorithm: 'HS256', expiresIn: `${this.config.getOrThrow<number>('JWT_REFRESH_TTL_DAYS')}d` as never,
         issuer: this.config.getOrThrow('JWT_ISSUER'), audience: this.config.getOrThrow('JWT_AUDIENCE')

@@ -66,6 +66,7 @@ export const paginatedSchema = <T extends z.ZodTypeAny>(schema: T) => z.object({
 export const loginSchema = z.object({
   email: z.string().trim().min(1, 'validation.required').email('validation.email'),
   password: z.string().min(1, 'validation.required').max(128),
+  rememberMe: z.boolean(),
 });
 export type LoginInput = z.infer<typeof loginSchema>;
 

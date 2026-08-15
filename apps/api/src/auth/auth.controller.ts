@@ -30,9 +30,9 @@ export class AuthController {
   @Post('login')
   async login(@Body(new ZodValidationPipe(loginSchema)) input: LoginInput, @Req() request: Request, @Res({ passthrough: true }) response: Response) {
     const result = await this.auth.login(input, this.sessionContext(request));
-    this.setRefreshCookie(response, result.refreshToken);
-    this.setCsrfCookie(response);
-    const { refreshToken: _refreshToken, ...body } = result;
+    this.setRefreshCookie(response, result.refreshToken, result.rememberMe);
+    this.setCsrfCookie(response, result.rememberMe);
+    const { refreshToken: _refreshToken, rememberMe: _rememberMe, ...body } = result;
     return body;
   }
 
@@ -43,9 +43,9 @@ export class AuthController {
     const rawToken = request.cookies?.[this.refreshCookieName()] as string | undefined;
     if (!rawToken) throw new UnauthorizedException('Sessão ausente.');
     const result = await this.auth.refresh(rawToken, this.sessionContext(request));
-    this.setRefreshCookie(response, result.refreshToken);
-    this.setCsrfCookie(response);
-    const { refreshToken: _refreshToken, ...body } = result;
+    this.setRefreshCookie(response, result.refreshToken, result.rememberMe);
+    this.setCsrfCookie(response, result.rememberMe);
+    const { refreshToken: _refreshToken, rememberMe: _rememberMe, ...body } = result;
     return body;
   }
 
@@ -65,10 +65,10 @@ export class AuthController {
     return safe;
   }
 
-  private setRefreshCookie(response: Response, token: string) {
+  private setRefreshCookie(response: Response, token: string, rememberMe: boolean) {
     response.cookie(this.refreshCookieName(), token, {
       ...this.cookieOptions(),
-      maxAge: this.config.getOrThrow<number>('JWT_REFRESH_TTL_DAYS') * 86_400_000
+      ...(rememberMe ? { maxAge: this.refreshCookieMaxAge() } : {})
     });
   }
 
@@ -86,11 +86,15 @@ export class AuthController {
     return this.config.get<string>('NODE_ENV') === 'production' ? '__Host-personaia_refresh' : 'personaia_refresh';
   }
 
-  private setCsrfCookie(response: Response) {
+  private setCsrfCookie(response: Response, rememberMe: boolean) {
     response.cookie('XSRF-TOKEN', newCsrfToken(), {
       ...this.csrfCookieOptions(),
-      maxAge: this.config.getOrThrow<number>('JWT_REFRESH_TTL_DAYS') * 86_400_000
+      ...(rememberMe ? { maxAge: this.refreshCookieMaxAge() } : {})
     });
+  }
+
+  private refreshCookieMaxAge() {
+    return this.config.getOrThrow<number>('JWT_REFRESH_TTL_DAYS') * 86_400_000;
   }
 
   private csrfCookieOptions() {

@@ -63,7 +63,7 @@ describe('AuthService account approval', () => {
     const service = new AuthService(prisma as never, {} as never, {} as never);
 
     try {
-      await service.login({ email: 'pessoa@teste.dev', password: 'UmaSenha#MuitoForte2026' }, {});
+      await service.login({ email: 'pessoa@teste.dev', password: 'UmaSenha#MuitoForte2026', rememberMe: false }, {});
       throw new Error('O login pendente deveria ter sido recusado.');
     } catch (error) {
       expect(error).toBeInstanceOf(ForbiddenException);
