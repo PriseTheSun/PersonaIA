@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
@@ -58,5 +58,17 @@ describe('LoginPage', () => {
     }));
     expect(localStorage.getItem('password')).toBeNull();
     expect(sessionStorage.getItem('password')).toBeNull();
+  });
+
+  it('allows navigating and pausing the authentication carousel', async () => {
+    const user = userEvent.setup();
+    renderLogin();
+    const carousel = screen.getByRole('complementary', { name: 'Recursos da PersonaIA' });
+
+    expect(within(carousel).getByText('Entenda o que as pessoas realmente dizem')).toBeInTheDocument();
+    await user.click(within(carousel).getByRole('button', { name: /Ver slide 2:/ }));
+    expect(within(carousel).getByText('Crie personas consistentes em minutos')).toBeInTheDocument();
+    await user.click(within(carousel).getByRole('button', { name: 'Pausar apresentação' }));
+    expect(within(carousel).getByRole('button', { name: 'Continuar apresentação' })).toBeInTheDocument();
   });
 });
