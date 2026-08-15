@@ -1,12 +1,15 @@
 import { Pause, Play } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { AppLogo } from '@/components/shared/app-logo';
 import { cn } from '@/lib/utils';
 
 const slides = [
   { image: '/images/auth/research-analysis.jpg', titleKey: 'authCarousel.researchTitle', descriptionKey: 'authCarousel.researchDescription' },
   { image: '/images/auth/audience-context.jpg', titleKey: 'authCarousel.personasTitle', descriptionKey: 'authCarousel.personasDescription' },
   { image: '/images/auth/research-decisions.jpg', titleKey: 'authCarousel.decisionsTitle', descriptionKey: 'authCarousel.decisionsDescription' },
+  { image: '/images/auth/persona-simulation.jpg', titleKey: 'authCarousel.simulationTitle', descriptionKey: 'authCarousel.simulationDescription' },
+  { image: '/images/auth/project-governance.jpg', titleKey: 'authCarousel.governanceTitle', descriptionKey: 'authCarousel.governanceDescription' },
 ] as const;
 
 export function AuthBrandPanel() {
@@ -58,7 +61,7 @@ export function AuthBrandPanel() {
       </div>
 
       <div className="relative z-10 flex min-h-[626px] flex-col justify-between p-10 xl:p-12">
-        <img src="/brand/favicon-personaia.svg" alt="PersonaIA" className="size-11 object-contain invert" />
+        <AppLogo tone="inverse" />
         <div className="max-w-md">
           <div key={activeSlide} className="auth-carousel-copy">
             <p className="text-sm font-medium text-secondary-foreground/80">{t('auth.brandKicker')}</p>

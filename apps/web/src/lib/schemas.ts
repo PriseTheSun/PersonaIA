@@ -107,3 +107,20 @@ export const userAccessSchema = userSchema.extend({
   updatedAt: z.string().datetime().optional(),
 });
 export type UserAccess = z.infer<typeof userAccessSchema>;
+
+export const notificationSchema = z.object({
+  id: z.string().uuid(),
+  tenantId: z.string().uuid().nullable(),
+  type: z.string().min(1),
+  targetId: z.string().uuid(),
+  payload: z.record(z.string(), z.unknown()),
+  readAt: z.string().datetime().nullable(),
+  resolvedAt: z.string().datetime().nullable(),
+  createdAt: z.string().datetime(),
+});
+export type AppNotification = z.infer<typeof notificationSchema>;
+
+export const notificationsResponseSchema = z.object({
+  items: z.array(notificationSchema),
+  unreadCount: z.number().int().nonnegative(),
+});

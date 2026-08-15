@@ -1,6 +1,7 @@
-import { Ban, CheckCircle2, MoreHorizontal, RotateCcw, ShieldCheck, UserRoundCog } from 'lucide-react';
+import { Ban, CheckCircle2, CircleX, MoreHorizontal, RotateCcw, ShieldCheck, UserRoundCog } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { Avatar } from '@/components/shared/avatar';
@@ -22,7 +23,7 @@ import { formatDate } from '@/lib/utils';
 
 const responseSchema = z.union([z.array(userAccessSchema), paginatedSchema(userAccessSchema)]).transform((value) => Array.isArray(value) ? value : value.items);
 const tenantResponseSchema = z.union([z.array(tenantSchema), paginatedSchema(tenantSchema)]).transform((value) => Array.isArray(value) ? value : value.items);
-const filters = ['ALL', 'PENDING', 'ACTIVE', 'SUSPENDED'] as const;
+const filters = ['ALL', 'PENDING', 'ACTIVE', 'SUSPENDED', 'ARCHIVED'] as const;
 type Filter = typeof filters[number];
 
 export function AccessControlPage() {
@@ -30,7 +31,9 @@ export function AccessControlPage() {
   const auth = useAuth();
   const isSuperAdmin = auth.status === 'authenticated' && auth.user.role === 'SUPER_ADMIN';
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState<Filter>('PENDING');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedFilter = searchParams.get('status');
+  const [filter, setFilter] = useState<Filter>(() => filters.includes(requestedFilter as Filter) ? requestedFilter as Filter : 'PENDING');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [mutatingId, setMutatingId] = useState<string | null>(null);
   const query = useApiQuery((signal) => apiRequest('/user-access', responseSchema, { signal }));
@@ -41,6 +44,7 @@ export function AccessControlPage() {
     PENDING: allItems.filter((user) => user.status === 'PENDING').length,
     ACTIVE: allItems.filter((user) => user.status === 'ACTIVE').length,
     SUSPENDED: allItems.filter((user) => user.status === 'SUSPENDED').length,
+    ARCHIVED: allItems.filter((user) => user.status === 'ARCHIVED').length,
   }), [allItems]);
   const items = useMemo(() => allItems.filter((user) => {
     const matchesStatus = filter === 'ALL' || user.status === filter;
@@ -50,14 +54,28 @@ export function AccessControlPage() {
   const editingUser = allItems.find((user) => user.id === editingId);
 
   useEffect(() => { document.title = `${t('accessControl.title')} · ${t('common.appName')}`; }, [t]);
+  useEffect(() => {
+    if (filters.includes(requestedFilter as Filter)) setFilter(requestedFilter as Filter);
+  }, [requestedFilter]);
 
-  const updateUser = async (user: UserAccess, input: { status?: 'ACTIVE' | 'SUSPENDED'; role?: Role; tenantId?: string | null }) => {
+  const selectFilter = (nextFilter: Filter) => {
+    setFilter(nextFilter);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('status', nextFilter);
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  const updateUser = async (user: UserAccess, input: { status?: 'ACTIVE' | 'SUSPENDED' | 'ARCHIVED'; role?: Role; tenantId?: string | null }) => {
     setMutatingId(user.id);
     try {
       await apiRequest(`/user-access/${encodeURIComponent(user.id)}`, z.unknown(), {
         method: 'PATCH', headers: csrfHeaders(), body: input
       });
-      toast.success(input.status === 'ACTIVE' && user.status === 'PENDING' ? t('accessControl.approved') : t('accessControl.updated'));
+      toast.success(input.status === 'ACTIVE' && user.status === 'PENDING'
+        ? t('accessControl.approved')
+        : input.status === 'ARCHIVED' && user.status === 'PENDING'
+          ? t('accessControl.rejected')
+          : t('accessControl.updated'));
       setEditingId(null);
       query.retry();
     } catch (error) {
@@ -86,7 +104,7 @@ export function AccessControlPage() {
         <div className="w-full space-y-3">
           <SearchField value={search} onChange={setSearch} placeholder={t('accessControl.search')} />
           <div className="flex gap-2 overflow-x-auto pb-0.5" role="group" aria-label={t('accessControl.filterLabel')}>
-            {filters.map((item) => <Button key={item} size="sm" variant={filter === item ? 'secondary' : 'ghost'} onClick={() => setFilter(item)} aria-pressed={filter === item}>{t(`accessControl.filters.${item}`)} <span className="tabular-nums text-muted-foreground">{counts[item]}</span></Button>)}
+            {filters.map((item) => <Button key={item} size="sm" variant={filter === item ? 'secondary' : 'ghost'} onClick={() => selectFilter(item)} aria-pressed={filter === item}>{t(`accessControl.filters.${item}`)} <span className="tabular-nums text-muted-foreground">{counts[item]}</span></Button>)}
           </div>
         </div>
       }>
@@ -101,7 +119,7 @@ export function AccessControlPage() {
                   <TableCell className="min-w-56"><div className="flex items-center gap-3"><Avatar name={user.name} /><div className="min-w-0"><div className="truncate font-medium">{user.name}{isSelf ? <span className="ml-2 text-xs font-normal text-muted-foreground">{t('accessControl.you')}</span> : null}</div><div className="truncate text-xs text-muted-foreground">{user.email}</div><div className="mt-1 text-xs text-muted-foreground md:hidden">{t(`roles.${user.role}`)}{user.tenant ? ` · ${user.tenant.name}` : ''}</div></div></div></TableCell>
                   <TableCell className="hidden md:table-cell">{t(`roles.${user.role}`)}</TableCell>
                   <TableCell className="hidden text-muted-foreground lg:table-cell">{user.tenant?.name ?? t('accessControl.platform')}</TableCell>
-                  <TableCell><div className="flex min-w-max items-center gap-2"><StatusBadge status={user.status} />{user.status === 'PENDING' && canManage ? <Button size="sm" onClick={() => updateUser(user, { status: 'ACTIVE' })} loading={mutatingId === user.id}><CheckCircle2 />{t('accessControl.approve')}</Button> : null}</div></TableCell>
+                  <TableCell><div className="flex min-w-max items-center gap-2"><StatusBadge status={user.status} />{user.status === 'PENDING' && canManage ? <><Button size="sm" onClick={() => updateUser(user, { status: 'ACTIVE' })} loading={mutatingId === user.id}><CheckCircle2 />{t('accessControl.approve')}</Button><Button size="sm" variant="outline" onClick={() => updateUser(user, { status: 'ARCHIVED' })} disabled={mutatingId === user.id}><CircleX />{t('accessControl.reject')}</Button></> : null}</div></TableCell>
                   <TableCell className="hidden text-muted-foreground xl:table-cell">{user.createdAt ? formatDate(user.createdAt, i18n.language) : t('common.unknown')}</TableCell>
                   <TableCell>
                     <DropdownMenu>
@@ -110,6 +128,7 @@ export function AccessControlPage() {
                         <DropdownMenuItem onSelect={() => setEditingId(user.id)}><UserRoundCog />{t('accessControl.editAccess')}</DropdownMenuItem>
                         <DropdownMenuSeparator />
                         {user.status !== 'ACTIVE' ? <DropdownMenuItem onSelect={() => updateUser(user, { status: 'ACTIVE' })}><RotateCcw />{user.status === 'PENDING' ? t('accessControl.approve') : t('accessControl.activate')}</DropdownMenuItem> : <DropdownMenuItem className="text-destructive" onSelect={() => updateUser(user, { status: 'SUSPENDED' })}><Ban />{t('accessControl.deactivate')}</DropdownMenuItem>}
+                        {user.status === 'PENDING' ? <DropdownMenuItem className="text-destructive" onSelect={() => updateUser(user, { status: 'ARCHIVED' })}><CircleX />{t('accessControl.reject')}</DropdownMenuItem> : null}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -123,9 +142,9 @@ export function AccessControlPage() {
   );
 }
 
-function AccessEditor({ user, tenants, isSuperAdmin, loading, onCancel, onSave }: { user: UserAccess; tenants: z.infer<typeof tenantSchema>[]; isSuperAdmin: boolean; loading: boolean; onCancel: () => void; onSave: (input: { status: 'ACTIVE' | 'SUSPENDED'; role?: Role; tenantId?: string | null }) => void }) {
+function AccessEditor({ user, tenants, isSuperAdmin, loading, onCancel, onSave }: { user: UserAccess; tenants: z.infer<typeof tenantSchema>[]; isSuperAdmin: boolean; loading: boolean; onCancel: () => void; onSave: (input: { status: 'ACTIVE' | 'SUSPENDED' | 'ARCHIVED'; role?: Role; tenantId?: string | null }) => void }) {
   const { t } = useTranslation();
-  const [status, setStatus] = useState<'ACTIVE' | 'SUSPENDED'>(user.status === 'SUSPENDED' ? 'SUSPENDED' : 'ACTIVE');
+  const [status, setStatus] = useState<'ACTIVE' | 'SUSPENDED' | 'ARCHIVED'>(user.status === 'ARCHIVED' ? 'ARCHIVED' : user.status === 'SUSPENDED' ? 'SUSPENDED' : 'ACTIVE');
   const [role, setRole] = useState<Role>(user.role);
   const [tenantId, setTenantId] = useState(user.tenantId ?? '');
   const [error, setError] = useState<string | null>(null);
@@ -144,7 +163,7 @@ function AccessEditor({ user, tenants, isSuperAdmin, loading, onCancel, onSave }
     <form onSubmit={submit} className="space-y-5">
       <MutationNotice message={error} type="error" />
       <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2"><Label htmlFor="access-status">{t('common.status')}</Label><select id="access-status" className="h-10 w-full rounded-md border border-input bg-card px-3 text-base md:text-sm" value={status} onChange={(event) => setStatus(event.target.value as 'ACTIVE' | 'SUSPENDED')}><option value="ACTIVE">{t('common.active')}</option><option value="SUSPENDED">{t('common.suspended')}</option></select></div>
+        <div className="space-y-2"><Label htmlFor="access-status">{t('common.status')}</Label><select id="access-status" className="h-10 w-full rounded-md border border-input bg-card px-3 text-base md:text-sm" value={status} onChange={(event) => setStatus(event.target.value as 'ACTIVE' | 'SUSPENDED' | 'ARCHIVED')}><option value="ACTIVE">{t('common.active')}</option><option value="SUSPENDED">{t('common.suspended')}</option><option value="ARCHIVED">{t('accessControl.filters.ARCHIVED')}</option></select></div>
         {isSuperAdmin ? <div className="space-y-2"><Label htmlFor="access-role">{t('accessControl.role')}</Label><select id="access-role" className="h-10 w-full rounded-md border border-input bg-card px-3 text-base md:text-sm" value={role} onChange={(event) => setRole(roleSchema.parse(event.target.value))}><option value="PROJECT_USER">{t('roles.PROJECT_USER')}</option><option value="CLIENT_ADMIN">{t('roles.CLIENT_ADMIN')}</option><option value="SUPER_ADMIN">{t('roles.SUPER_ADMIN')}</option></select></div> : null}
       </div>
       {isSuperAdmin && role !== 'SUPER_ADMIN' ? <div className="space-y-2"><Label htmlFor="access-tenant">{t('common.tenant')}</Label><select id="access-tenant" className="h-10 w-full rounded-md border border-input bg-card px-3 text-base md:text-sm" value={tenantId} onChange={(event) => setTenantId(event.target.value)}><option value="">{t('forms.selectTenant')}</option>{tenants.filter((tenant) => tenant.status === 'ACTIVE').map((tenant) => <option value={tenant.id} key={tenant.id}>{tenant.name}</option>)}</select></div> : null}

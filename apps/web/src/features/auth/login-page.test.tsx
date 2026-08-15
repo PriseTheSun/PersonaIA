@@ -66,8 +66,11 @@ describe('LoginPage', () => {
     const carousel = screen.getByRole('complementary', { name: 'Recursos da PersonaIA' });
 
     expect(within(carousel).getByText('Entenda o que as pessoas realmente dizem')).toBeInTheDocument();
+    expect(within(carousel).getAllByRole('button', { name: /Ver slide/ })).toHaveLength(5);
     await user.click(within(carousel).getByRole('button', { name: /Ver slide 2:/ }));
     expect(within(carousel).getByText('Crie personas consistentes em minutos')).toBeInTheDocument();
+    await user.click(within(carousel).getByRole('button', { name: /Ver slide 5:/ }));
+    expect(within(carousel).getByText('Mantenha cada projeto no contexto certo')).toBeInTheDocument();
     await user.click(within(carousel).getByRole('button', { name: 'Pausar apresentação' }));
     expect(within(carousel).getByRole('button', { name: 'Continuar apresentação' })).toBeInTheDocument();
   });

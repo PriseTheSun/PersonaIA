@@ -22,7 +22,7 @@ describe('AuthService refresh reuse detection', () => {
       sub: '30000000-0000-4000-8000-000000000003', sid: '10000000-0000-4000-8000-000000000001', fid: '20000000-0000-4000-8000-000000000002', type: 'refresh', ver: 0
     }) };
     const config = { getOrThrow: jest.fn((key: string) => key.includes('SECRET') ? 'a-secure-test-secret-that-is-long-enough' : 7) };
-    const service = new AuthService(prisma as never, jwt as never, config as never);
+    const service = new AuthService(prisma as never, jwt as never, config as never, {} as never);
 
     await expect(service.refresh('replayed-token', {})).rejects.toBeInstanceOf(UnauthorizedException);
     expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ familyId: '20000000-0000-4000-8000-000000000002' }) }));
@@ -37,10 +37,11 @@ describe('AuthService account approval', () => {
       auditLog: { create: jest.fn().mockResolvedValue({}) }
     };
     const prisma = {
-      tenant: { findFirst: jest.fn().mockResolvedValue({ id: '10000000-0000-4000-8000-000000000001' }) },
+      tenant: { findFirst: jest.fn().mockResolvedValue({ id: '10000000-0000-4000-8000-000000000001', name: 'Cliente Teste' }) },
       $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx))
     };
-    const service = new AuthService(prisma as never, {} as never, {} as never);
+    const notifications = { dispatchAccessRequest: jest.fn().mockResolvedValue(undefined) };
+    const service = new AuthService(prisma as never, {} as never, {} as never, notifications as never);
 
     await expect(service.register({
       name: 'Pessoa Teste', email: 'Pessoa@Teste.dev', password: 'UmaSenha#MuitoForte2026', tenantSlug: 'cliente-teste'
@@ -49,6 +50,13 @@ describe('AuthService account approval', () => {
       data: expect.objectContaining({ email: 'pessoa@teste.dev', role: 'PROJECT_USER', status: 'PENDING' })
     }));
     expect(tx.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'USER_REGISTERED' }) }));
+    expect(notifications.dispatchAccessRequest).toHaveBeenCalledWith(tx, {
+      userId: '30000000-0000-4000-8000-000000000003',
+      userName: 'Pessoa Teste',
+      userEmail: 'pessoa@teste.dev',
+      tenantId: '10000000-0000-4000-8000-000000000001',
+      tenantName: 'Cliente Teste'
+    });
   });
 
   it('refuses login with the correct password while approval is pending', async () => {
@@ -60,7 +68,7 @@ describe('AuthService account approval', () => {
         tenant: { status: 'ACTIVE' }
       }) }
     };
-    const service = new AuthService(prisma as never, {} as never, {} as never);
+    const service = new AuthService(prisma as never, {} as never, {} as never, {} as never);
 
     try {
       await service.login({ email: 'pessoa@teste.dev', password: 'UmaSenha#MuitoForte2026', rememberMe: false }, {});

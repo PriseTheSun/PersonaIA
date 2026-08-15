@@ -7,7 +7,7 @@ import { AuthBrandPanel } from './auth-brand-panel';
 export function AuthLayout({ labelledBy, contentClassName, children }: { labelledBy: string; contentClassName?: string; children: ReactNode }) {
   return (
     <main className="grid min-h-screen place-items-center bg-muted/50 p-4 sm:p-6 lg:p-8">
-      <section className="relative grid w-full max-w-none overflow-hidden rounded-xl border bg-card text-card-foreground shadow-sm lg:grid-cols-[0.96fr_1.04fr]" aria-labelledby={labelledBy}>
+      <section className="relative grid w-full max-w-[1000px] overflow-hidden rounded-xl border bg-card text-card-foreground shadow-sm lg:min-h-[743px] lg:grid-cols-[0.96fr_1.04fr]" aria-labelledby={labelledBy}>
         <AuthBrandPanel />
         <div className="relative flex min-h-[calc(100svh-2rem)] items-center px-5 py-16 sm:min-h-[640px] sm:px-10 lg:min-h-[650px] lg:px-14 lg:py-8 xl:px-16">
           <div className="absolute right-3 top-3 flex items-center sm:right-5 sm:top-5"><LanguageSelector /><ThemeSelector /></div>

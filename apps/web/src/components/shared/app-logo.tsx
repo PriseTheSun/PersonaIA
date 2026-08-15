@@ -24,13 +24,15 @@ const compactLogoMaskStyle: CSSProperties = {
   maskSize: 'contain',
 };
 
-export function AppLogo({ compact = false, className }: { compact?: boolean; className?: string }) {
+export function AppLogo({ compact = false, tone = 'default', className }: { compact?: boolean; tone?: 'default' | 'inverse'; className?: string }) {
+  const colorClassName = tone === 'inverse' ? 'bg-white' : 'bg-[#0c1825] dark:bg-white';
+
   return (
     <span className={cn('inline-flex shrink-0 items-center', className)} role="img" aria-label="PersonaIA">
       {compact ? (
-        <span className="block size-8 bg-[#0c1825] dark:bg-white" style={compactLogoMaskStyle} aria-hidden="true" />
+        <span className={cn('block size-8', colorClassName)} style={compactLogoMaskStyle} aria-hidden="true" />
       ) : (
-        <span className="block h-12 w-[190px] bg-[#0c1825] dark:bg-white" style={logoMaskStyle} aria-hidden="true" />
+        <span className={cn('block h-12 w-[190px]', colorClassName)} style={logoMaskStyle} aria-hidden="true" />
       )}
     </span>
   );

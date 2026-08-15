@@ -1,6 +1,6 @@
 import { FolderKanban, Gauge, KeyRound, ShieldCheck, Users, Building2, UserRoundCog } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import type { Role } from '@/lib/schemas';
 import { SidebarGroup, SidebarGroupContent, SidebarGroupLabel, SidebarMenu, SidebarMenuItem } from '@/components/ui/sidebar';
 import { useSidebar } from '@/components/ui/sidebar-context';
@@ -19,6 +19,7 @@ const items = [
 
 export function Navigation({ role, onNavigate }: { role: Role; onNavigate?: () => void }) {
   const { t } = useTranslation();
+  const location = useLocation();
   const { isDesktop, open } = useSidebar();
   const showTooltips = isDesktop && !open;
 
@@ -38,10 +39,13 @@ export function Navigation({ role, onNavigate }: { role: Role; onNavigate?: () =
                         end={to === '/'}
                         onClick={onNavigate}
                         aria-label={t(label)}
-                        className={({ isActive }) => cn('flex min-h-10 items-center gap-3 rounded-md px-3 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-data-[collapsible=icon]/sidebar:justify-center group-data-[collapsible=icon]/sidebar:gap-0 group-data-[collapsible=icon]/sidebar:px-0', isActive && 'bg-sidebar-accent text-sidebar-accent-foreground')}
+                        className={cn(
+                          'flex min-h-10 w-full min-w-0 flex-nowrap items-center gap-3 whitespace-nowrap rounded-md px-3 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground group-data-[collapsible=icon]/sidebar:justify-center group-data-[collapsible=icon]/sidebar:gap-0 group-data-[collapsible=icon]/sidebar:px-0',
+                          (to === '/' ? location.pathname === '/' : location.pathname === to || location.pathname.startsWith(`${to}/`)) && 'bg-sidebar-accent text-sidebar-accent-foreground',
+                        )}
                       >
                         <Icon className="size-[18px] shrink-0" aria-hidden="true" />
-                        <span className="truncate group-data-[collapsible=icon]/sidebar:sr-only">{t(label)}</span>
+                        <span className="min-w-0 flex-1 truncate whitespace-nowrap group-data-[collapsible=icon]/sidebar:sr-only">{t(label)}</span>
                       </NavLink>
                     </TooltipTrigger>
                     {showTooltips ? <TooltipContent side="right">{t(label)}</TooltipContent> : null}

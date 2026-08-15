@@ -26,10 +26,15 @@ function renderShell() {
   );
 }
 
+function jsonResponse(payload: unknown) {
+  return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } });
+}
+
 describe('AppShell', () => {
   beforeEach(() => {
     localStorage.clear();
     localStorage.setItem('personaia.locale', 'pt-BR');
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(jsonResponse({ items: [], unreadCount: 0 }))));
     vi.mocked(window.matchMedia).mockImplementation((query: string) => ({
       matches: false,
       media: query,
@@ -50,14 +55,46 @@ describe('AppShell', () => {
     expect(screen.getByRole('button', { name: 'Tema' }).closest('header')).not.toBeNull();
   });
 
+  it('keeps sidebar icons and labels on one line', () => {
+    renderShell();
+    const accessLink = screen.getByRole('link', { name: 'Controle de acessos' });
+
+    expect(accessLink).toHaveClass('flex', 'w-full', 'flex-nowrap', 'whitespace-nowrap');
+    expect(accessLink.className).not.toContain('({ isActive })');
+    expect(within(accessLink).getByText('Controle de acessos')).toHaveClass('truncate', 'whitespace-nowrap');
+  });
+
   it('opens the notification panel with an accessible empty state', async () => {
     const user = userEvent.setup();
     renderShell();
 
     await user.click(screen.getByRole('button', { name: 'Notificações' }));
 
-    expect(screen.getByRole('status')).toHaveTextContent('Tudo em dia');
+    expect(await screen.findByRole('status')).toHaveTextContent('Tudo em dia');
     expect(screen.getByRole('status')).toHaveTextContent('Novas atividades importantes aparecerão aqui.');
+  });
+
+  it('shows a persistent unread access request for the responsible client', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockImplementation(() => Promise.resolve(jsonResponse({
+      unreadCount: 1,
+      items: [{
+        id: '10000000-0000-4000-8000-000000000001',
+        tenantId: '20000000-0000-4000-8000-000000000002',
+        type: 'ACCESS_REQUESTED',
+        targetId: '30000000-0000-4000-8000-000000000003',
+        payload: { userName: 'Pessoa Teste', userEmail: 'pessoa@teste.dev', tenantName: 'Cliente Teste' },
+        readAt: null,
+        resolvedAt: null,
+        createdAt: '2026-08-15T12:00:00.000Z',
+      }],
+    }))));
+    const user = userEvent.setup();
+    renderShell();
+
+    await user.click(await screen.findByRole('button', { name: 'Notificações, 1 não lidas' }));
+
+    expect(await screen.findByText('Novo pedido de acesso')).toBeVisible();
+    expect(screen.getByText('Pessoa Teste (pessoa@teste.dev) solicitou acesso a Cliente Teste.')).toBeVisible();
   });
 
   it('opens the complete sidebar as an off-canvas menu on mobile', async () => {

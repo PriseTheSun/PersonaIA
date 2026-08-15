@@ -119,7 +119,7 @@ export function SidebarMenu({ className, ...props }: HTMLAttributes<HTMLUListEle
 }
 
 export function SidebarMenuItem({ className, ...props }: HTMLAttributes<HTMLLIElement>) {
-  return <li data-sidebar="menu-item" className={cn('relative', className)} {...props} />;
+  return <li data-sidebar="menu-item" className={cn('relative min-w-0', className)} {...props} />;
 }
 
 export function SidebarTrigger({ className, openLabel, closeLabel, menuLabel }: { className?: string; openLabel: string; closeLabel: string; menuLabel: string }) {
