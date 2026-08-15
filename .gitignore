@@ -1,0 +1,15 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+.idea/
+.vscode/
+apps/api/prisma/dev.db
+playwright-report/
+test-results/
+.playwright-cli/
+output/playwright/

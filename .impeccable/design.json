@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-15T17:45:00.000Z",
+  "title": "Design System: PersonaIA",
+  "extensions": {
+    "colorMeta": {
+      "primary": { "role": "primary", "displayName": "Cobalto Operacional", "canonical": "oklch(0.450 0.086 230)", "tonalRamp": ["oklch(0.15 0.04 230)", "oklch(0.25 0.06 230)", "oklch(0.35 0.08 230)", "oklch(0.45 0.086 230)", "oklch(0.58 0.08 230)", "oklch(0.70 0.06 230)", "oklch(0.84 0.035 230)", "oklch(0.95 0.012 230)"] },
+      "background": { "role": "neutral", "displayName": "Branco de Trabalho", "canonical": "oklch(1 0 0)", "tonalRamp": ["oklch(0.15 0 0)", "oklch(0.28 0 0)", "oklch(0.42 0 0)", "oklch(0.56 0 0)", "oklch(0.70 0 0)", "oklch(0.82 0 0)", "oklch(0.92 0 0)", "oklch(1 0 0)"] },
+      "accent": { "role": "secondary", "displayName": "Verde de Confirmação", "canonical": "oklch(0.690 0.135 155)", "tonalRamp": ["oklch(0.15 0.05 155)", "oklch(0.25 0.08 155)", "oklch(0.37 0.11 155)", "oklch(0.50 0.13 155)", "oklch(0.62 0.135 155)", "oklch(0.74 0.11 155)", "oklch(0.86 0.07 155)", "oklch(0.95 0.025 155)"] }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "Headline", "purpose": "Títulos de página e decisões principais." },
+      "body": { "displayName": "Body", "purpose": "Conteúdo, formulários e dados administrativos." }
+    },
+    "shadows": [
+      { "name": "overlay-discreto", "value": "0 4px 8px oklch(0.18 0.018 230 / 0.12)", "purpose": "Menus e popovers temporários." }
+    ],
+    "motion": [
+      { "name": "state", "value": "180ms cubic-bezier(0.25, 1, 0.5, 1)", "purpose": "Feedback de hover, foco e mudança de estado." }
+    ],
+    "breakpoints": [
+      { "name": "phone-min", "value": "320px" },
+      { "name": "sm", "value": "640px" },
+      { "name": "lg", "value": "1024px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Ação principal única de uma região.",
+      "html": "<button class=\"ds-btn-primary\">Criar projeto</button>",
+      "css": ".ds-btn-primary{background:oklch(0.45 0.086 230);color:white;border:0;border-radius:8px;padding:8px 16px;min-height:36px;font:600 14px Inter,system-ui,sans-serif;transition:background 180ms cubic-bezier(.25,1,.5,1)}.ds-btn-primary:hover{background:oklch(0.39 0.082 230)}.ds-btn-primary:focus-visible{outline:2px solid oklch(0.45 0.086 230);outline-offset:2px}.ds-btn-primary:active{background:oklch(0.34 0.08 230)}"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Campo de formulário com rótulo sempre visível.",
+      "html": "<label class=\"ds-field\"><span>E-mail</span><input type=\"email\" placeholder=\"nome@empresa.com\"></label>",
+      "css": ".ds-field{display:grid;gap:6px;color:oklch(0.18 0.018 230);font:550 13px Inter,system-ui,sans-serif}.ds-field input{height:38px;border:1px solid oklch(0.9 0.008 230);border-radius:8px;background:white;color:oklch(0.18 0.018 230);padding:0 12px;font:400 14px Inter,system-ui,sans-serif}.ds-field input:focus-visible{outline:2px solid oklch(0.45 0.086 230);outline-offset:1px;border-color:transparent}"
+    },
+    {
+      "name": "Status Chip",
+      "kind": "chip",
+      "description": "Estado acompanhado de texto e indicador visual.",
+      "html": "<span class=\"ds-chip\"><span aria-hidden=\"true\">●</span> Ativo</span>",
+      "css": ".ds-chip{display:inline-flex;align-items:center;gap:6px;border-radius:999px;background:oklch(0.93 0.035 155);color:oklch(0.29 0.08 155);padding:4px 8px;font:600 12px Inter,system-ui,sans-serif}"
+    }
+  ],
+  "narrative": {
+    "northStar": "Clareza Operacional",
+    "overview": "Um ambiente de trabalho preciso, claro e familiar, com ações inequívocas e densidade informacional controlada.",
+    "keyCharacteristics": ["Hierarquia previsível", "Componentes familiares", "Responsividade estrutural", "Segurança contextual"],
+    "rules": [
+      { "name": "Regra de Uma Voz", "body": "A cor primária ocupa no máximo 10% da tela e nunca é decorativa.", "section": "colors" },
+      { "name": "Regra Plano por Padrão", "body": "Sombras só aparecem em overlays temporários.", "section": "elevation" }
+    ],
+    "dos": ["Usar tabelas e listas responsivas.", "Manter foco visível e estados acionáveis."],
+    "donts": ["Não criar dashboards genéricos cheios de cards.", "Não usar excesso de animações ou gradientes.", "Não depender de muitos modais."]
+  }
+}

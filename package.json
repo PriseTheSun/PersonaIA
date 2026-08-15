@@ -1,0 +1,27 @@
+{
+  "name": "personaia",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Plataforma multi-tenant para administração de personas e pesquisas.",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "dev": "concurrently -n api,web -c blue,green \"npm run start:dev -w @personaia/api\" \"npm run dev -w @personaia/web\"",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:e2e": "npm run test:e2e -w @personaia/api",
+    "format": "prettier --write .",
+    "db:migrate": "npm run prisma:migrate -w @personaia/api",
+    "db:seed": "npm run prisma:seed -w @personaia/api"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.0",
+    "prettier": "^3.6.2"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
+  }
+}

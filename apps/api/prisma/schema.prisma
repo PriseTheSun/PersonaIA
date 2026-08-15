@@ -1,0 +1,128 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  CLIENT_ADMIN
+  PROJECT_USER
+}
+
+enum RecordStatus {
+  ACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+enum ProjectPermission {
+  OWNER
+  MANAGER
+  CONTRIBUTOR
+  VIEWER
+}
+
+model Tenant {
+  id        String       @id @default(uuid()) @db.Uuid
+  name      String       @db.VarChar(120)
+  slug      String       @unique @db.VarChar(80)
+  status    RecordStatus @default(ACTIVE)
+  users     User[]
+  projects  Project[]
+  auditLogs AuditLog[]
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([status])
+}
+
+model User {
+  id              String              @id @default(uuid()) @db.Uuid
+  tenantId        String?             @db.Uuid
+  tenant          Tenant?             @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  email           String              @unique @db.VarChar(254)
+  name            String              @db.VarChar(120)
+  passwordHash    String              @db.VarChar(255)
+  role            Role
+  status          RecordStatus        @default(ACTIVE)
+  tokenVersion    Int                 @default(0)
+  lastLoginAt     DateTime?
+  memberships     ProjectMembership[]
+  refreshSessions RefreshSession[]
+  auditLogs       AuditLog[]          @relation("AuditActor")
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@unique([id, tenantId])
+  @@index([tenantId, role, status])
+}
+
+model Project {
+  id          String              @id @default(uuid()) @db.Uuid
+  tenantId    String              @db.Uuid
+  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  name        String              @db.VarChar(120)
+  slug        String              @db.VarChar(80)
+  description String?             @db.VarChar(500)
+  status      RecordStatus        @default(ACTIVE)
+  memberships ProjectMembership[]
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@unique([tenantId, slug])
+  @@unique([id, tenantId])
+  @@index([tenantId, status])
+}
+
+model ProjectMembership {
+  id         String            @id @default(uuid()) @db.Uuid
+  tenantId   String            @db.Uuid
+  projectId  String            @db.Uuid
+  userId     String            @db.Uuid
+  permission ProjectPermission @default(VIEWER)
+  project    Project           @relation(fields: [projectId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  user       User              @relation(fields: [userId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  @@unique([projectId, userId])
+  @@index([tenantId, userId])
+  @@index([tenantId, projectId])
+}
+
+model RefreshSession {
+  id           String    @id @db.Uuid
+  userId       String    @db.Uuid
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyId     String    @db.Uuid
+  tokenHash    String    @unique @db.Char(64)
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  replacedById String?   @db.Uuid
+  userAgent    String?   @db.VarChar(300)
+  ipAddress    String?   @db.VarChar(64)
+  createdAt    DateTime  @default(now())
+
+  @@index([userId, revokedAt])
+  @@index([familyId])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String?  @db.Uuid
+  tenant     Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  actorId    String?  @db.Uuid
+  actor      User?    @relation("AuditActor", fields: [actorId], references: [id], onDelete: SetNull)
+  action     String   @db.VarChar(100)
+  targetType String   @db.VarChar(80)
+  targetId   String?  @db.Uuid
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([actorId, createdAt])
+}
