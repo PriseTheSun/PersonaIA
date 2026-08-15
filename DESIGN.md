@@ -2,16 +2,16 @@
 name: PersonaIA
 description: Administração segura e clara de personas, projetos e equipes.
 colors:
-  primary: "oklch(0.450 0.086 230)"
-  primary-hover: "oklch(0.390 0.082 230)"
+  primary: "oklch(0.145 0 0)"
+  primary-hover: "oklch(0.240 0 0)"
   background: "oklch(1 0 0)"
-  surface: "oklch(0.970 0.004 230)"
-  ink: "oklch(0.180 0.018 230)"
-  muted: "oklch(0.480 0.018 230)"
-  border: "oklch(0.900 0.008 230)"
-  accent: "oklch(0.690 0.135 155)"
-  danger: "oklch(0.560 0.210 27)"
-  success: "oklch(0.520 0.135 155)"
+  surface: "oklch(0.965 0 0)"
+  ink: "oklch(0.145 0 0)"
+  muted: "oklch(0.430 0 0)"
+  border: "oklch(0.880 0 0)"
+  accent: "oklch(0.920 0 0)"
+  danger: "oklch(0.240 0 0)"
+  success: "oklch(0.145 0 0)"
 typography:
   headline:
     fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif"
@@ -68,7 +68,7 @@ components:
 
 **Creative North Star: "Clareza Operacional"**
 
-PersonaIA parece um ambiente de trabalho preciso sob luz natural: superfícies brancas, camadas discretas e um azul profundo reservado ao que requer ação ou atenção. O sistema deriva do Shadcn, preservando affordances familiares e refinando densidade, hierarquia e responsividade para administração recorrente.
+PersonaIA parece um ambiente de trabalho preciso sob luz natural: superfícies brancas, camadas discretas e preto reservado ao que requer ação ou atenção. O sistema deriva do Shadcn, preservando affordances familiares e refinando densidade, hierarquia e responsividade para administração recorrente.
 
 A interface rejeita dashboards genéricos cheios de cards, excesso de animações ou gradientes, baixa densidade informacional, fluxos dependentes de muitos modais, glassmorphism decorativo e qualquer escolha que sacrifique clareza por aparência.
 
@@ -82,24 +82,24 @@ A interface rejeita dashboards genéricos cheios de cards, excesso de animaçõe
 
 ## 2. Colors
 
-A estratégia é restrita: branco puro e neutros levemente orientados ao azul sustentam um cobalto discreto, usado em menos de 10% da tela.
+A estratégia é estritamente monocromática: branco, preto e cinzas neutros organizam ação, estado e profundidade sem depender de matiz.
 
 ### Primary
 
-- **Cobalto Operacional** (`oklch(0.450 0.086 230)`): ações primárias, seleção atual, foco e links relevantes.
-- **Cobalto Profundo** (`oklch(0.390 0.082 230)`): estado hover/active da cor primária.
+- **Preto Operacional** (`oklch(0.145 0 0)`): ações primárias, seleção atual, foco e links relevantes.
+- **Grafite Profundo** (`oklch(0.240 0 0)`): estado hover/active da cor primária.
 
 ### Secondary
 
-- **Verde de Confirmação** (`oklch(0.690 0.135 155)`): badges e confirmações pontuais; não compete com a ação primária.
+- **Cinza de Estado** (`oklch(0.920 0 0)`): badges e confirmações pontuais; texto e ícones preservam o significado sem depender de cor.
 
 ### Neutral
 
 - **Branco de Trabalho** (`oklch(1 0 0)`): plano principal.
-- **Superfície Fria** (`oklch(0.970 0.004 230)`): sidebar, cabeçalhos de tabela e agrupamentos.
-- **Tinta Azul-Negra** (`oklch(0.180 0.018 230)`): texto principal.
-- **Texto Secundário** (`oklch(0.480 0.018 230)`): explicações e metadados com contraste AA.
-- **Divisor Frio** (`oklch(0.900 0.008 230)`): separadores e bordas estruturais.
+- **Superfície Neutra** (`oklch(0.965 0 0)`): sidebar, cabeçalhos de tabela e agrupamentos.
+- **Tinta Preta** (`oklch(0.145 0 0)`): texto principal.
+- **Texto Secundário** (`oklch(0.430 0 0)`): explicações e metadados com contraste AA.
+- **Divisor Neutro** (`oklch(0.880 0 0)`): separadores e bordas estruturais.
 
 ### Named Rules
 
@@ -125,11 +125,11 @@ A estratégia é restrita: branco puro e neutros levemente orientados ao azul su
 
 ## 4. Elevation
 
-O sistema é plano por padrão. Profundidade vem de camadas tonais e divisores; sombra aparece apenas em elementos temporários elevados, como menus e popovers, com `0 4px 8px oklch(0.18 0.018 230 / 0.12)`.
+O sistema é plano por padrão. Profundidade vem de camadas tonais e divisores; sombra aparece apenas em elementos temporários elevados, como menus e popovers, com `0 4px 8px oklch(0.145 0 0 / 0.12)`.
 
 ### Shadow Vocabulary
 
-- **Overlay discreto** (`0 4px 8px oklch(0.18 0.018 230 / 0.12)`): menus, comboboxes e popovers.
+- **Overlay discreto** (`0 4px 8px oklch(0.145 0 0 / 0.12)`): menus, comboboxes e popovers.
 
 ### Named Rules
 
@@ -140,8 +140,8 @@ O sistema é plano por padrão. Profundidade vem de camadas tonais e divisores; 
 ### Buttons
 
 - **Shape:** raio moderado (8 px), altura mínima visual de 36 px e alvo de toque de 44 px quando isolado em mobile.
-- **Primary:** Cobalto Operacional com texto branco, padding horizontal de 16 px.
-- **Hover / Focus:** Cobalto Profundo; foco com anel externo de 2 px, sempre visível por teclado.
+- **Primary:** Preto Operacional com texto branco, padding horizontal de 16 px.
+- **Hover / Focus:** Grafite Profundo; foco com anel externo preto de 2 px, sempre visível por teclado.
 - **Secondary / Ghost:** superfícies neutras e borda discreta; não disputam hierarquia com a ação primária.
 
 ### Chips
@@ -159,13 +159,13 @@ O sistema é plano por padrão. Profundidade vem de camadas tonais e divisores; 
 
 ### Inputs / Fields
 
-- **Style:** fundo branco, borda Divisor Frio, raio de 8 px e altura de 36–40 px.
-- **Focus:** anel cobalto de 2 px com offset; labels permanecem visíveis.
+- **Style:** fundo branco, borda Divisor Neutro, raio de 8 px e altura de 36–40 px.
+- **Focus:** anel preto de 2 px com offset; labels permanecem visíveis.
 - **Error / Disabled:** erro combina cor, ícone e mensagem; disabled preserva contraste e explica indisponibilidade quando necessário.
 
 ### Navigation
 
-Sidebar em superfície tonal no desktop; navegação compacta e acionável por drawer em larguras pequenas. O estado ativo combina cor, peso e fundo discreto. O contexto atual de tenant e projeto permanece identificável.
+Sidebar em superfície tonal no desktop; navegação compacta e acionável por drawer em larguras pequenas. O estado ativo combina contraste, peso e fundo discreto. O contexto atual de tenant e projeto permanece identificável.
 
 ## 6. Do's and Don'ts
 

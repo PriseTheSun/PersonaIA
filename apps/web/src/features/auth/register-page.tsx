@@ -52,7 +52,7 @@ export function RegisterPage() {
         <AppLogo />
         {complete ? (
           <div className="py-8 text-center">
-            <span className="mx-auto grid size-12 place-items-center rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200"><Clock3 aria-hidden="true" /></span>
+            <span className="mx-auto grid size-12 place-items-center rounded-full border bg-muted text-foreground"><Clock3 aria-hidden="true" /></span>
             <h1 id="register-title" className="mt-5 text-2xl font-semibold tracking-[-0.025em]">{t('registration.successTitle')}</h1>
             <p className="mx-auto mt-2 max-w-sm text-sm leading-6 text-muted-foreground">{t('registration.successDescription')}</p>
             <Button asChild variant="outline" className="mt-6"><Link to="/login"><ArrowLeft />{t('registration.backToLogin')}</Link></Button>
@@ -85,7 +85,7 @@ export function RegisterPage() {
                 </Field>
               </div>
               <p className="flex gap-2 text-xs leading-5 text-muted-foreground"><LockKeyhole className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />{t('forms.passwordHint')}</p>
-              {serverError ? <div className="rounded-md bg-red-100 px-3 py-2.5 text-sm text-red-950 dark:bg-red-950 dark:text-red-100" role="alert">{serverError}</div> : null}
+              {serverError ? <div className="rounded-md border border-foreground/40 bg-background px-3 py-2.5 text-sm text-foreground" role="alert">{serverError}</div> : null}
               <Button type="submit" size="lg" className="w-full" loading={isSubmitting}>{isSubmitting ? t('registration.submitting') : t('registration.submit')} {!isSubmitting ? <ArrowRight aria-hidden="true" /> : null}</Button>
             </form>
             <p className="mt-6 text-center text-sm text-muted-foreground">{t('registration.alreadyHaveAccount')} <Link to="/login" className="font-medium text-primary hover:underline">{t('auth.submit')}</Link></p>

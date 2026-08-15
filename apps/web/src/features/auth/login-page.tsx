@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { AppLogo } from '@/components/shared/app-logo';
 import { LanguageSelector } from '@/components/shared/language-selector';
 import { ThemeSelector } from '@/components/shared/theme-selector';
 import { Button } from '@/components/ui/button';
@@ -29,7 +28,7 @@ export function LoginPage() {
   });
 
   useEffect(() => { document.title = `${t('auth.title')} · ${t('common.appName')}`; }, [t]);
-  if (auth.status === 'loading') return <main className="grid min-h-screen place-items-center"><div className="flex flex-col items-center gap-5" role="status"><AppLogo /><Skeleton className="h-3 w-56" /><span className="sr-only">{t('common.loading')}</span></div></main>;
+  if (auth.status === 'loading') return <main className="grid min-h-screen place-items-center"><div role="status"><Skeleton className="h-3 w-56" /><span className="sr-only">{t('common.loading')}</span></div></main>;
   if (auth.status === 'authenticated') return <Navigate to="/" replace />;
 
   const onSubmit = handleSubmit(async (values) => {
@@ -49,8 +48,7 @@ export function LoginPage() {
     <main className="relative grid min-h-screen place-items-center bg-muted/50 px-4 py-8 sm:px-6">
       <div className="absolute right-3 top-3 flex items-center sm:right-6 sm:top-6"><LanguageSelector /><ThemeSelector /></div>
       <section className="w-full max-w-[420px] rounded-lg border bg-background p-5 sm:p-8" aria-labelledby="login-title">
-        <AppLogo />
-        <div className="mt-8">
+        <div>
           <h1 id="login-title" className="text-2xl font-semibold tracking-[-0.025em]">{t('auth.title')}</h1>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">{t('auth.subtitle')}</p>
         </div>
@@ -74,7 +72,7 @@ export function LoginPage() {
             <Checkbox id="rememberMe" {...register('rememberMe')} />
             <Label htmlFor="rememberMe" className="cursor-pointer font-normal">{t('auth.rememberMe')}</Label>
           </div>
-          {serverError ? <div className="rounded-md bg-red-100 px-3 py-2.5 text-sm text-red-950 dark:bg-red-950 dark:text-red-100" role="alert">{serverError}</div> : null}
+          {serverError ? <div className="rounded-md border border-foreground/40 bg-background px-3 py-2.5 text-sm text-foreground" role="alert">{serverError}</div> : null}
           <Button type="submit" size="lg" className="w-full" loading={isSubmitting}>{isSubmitting ? t('auth.submitting') : t('auth.submit')} {!isSubmitting ? <ArrowRight aria-hidden="true" /> : null}</Button>
         </form>
         <p className="mt-6 flex gap-2 text-xs leading-5 text-muted-foreground"><LockKeyhole className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />{t('auth.secureSession')}</p>

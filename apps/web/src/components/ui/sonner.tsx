@@ -17,7 +17,6 @@ export function AppToaster() {
     <Toaster
       theme={theme}
       position="bottom-right"
-      richColors
       icons={{
         success: <CircleCheck className="size-4" />,
         info: <Info className="size-4" />,

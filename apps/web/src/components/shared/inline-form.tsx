@@ -15,5 +15,5 @@ export function InlineForm({ title, description, onClose, children }: { title: s
 
 export function MutationNotice({ message, type = 'success' }: { message: string | null; type?: 'success' | 'error' }) {
   if (!message) return null;
-  return <div className={type === 'success' ? 'rounded-md bg-emerald-100 px-3 py-2.5 text-sm text-emerald-950 dark:bg-emerald-950 dark:text-emerald-100' : 'rounded-md bg-red-100 px-3 py-2.5 text-sm text-red-950 dark:bg-red-950 dark:text-red-100'} role={type === 'error' ? 'alert' : 'status'}>{message}</div>;
+  return <div className={type === 'success' ? 'rounded-md border bg-muted px-3 py-2.5 text-sm text-foreground' : 'rounded-md border border-foreground/40 bg-background px-3 py-2.5 text-sm text-foreground'} role={type === 'error' ? 'alert' : 'status'}>{message}</div>;
 }

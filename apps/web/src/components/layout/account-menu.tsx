@@ -10,10 +10,10 @@ export function AccountMenu() {
   if (auth.status !== 'authenticated') return null;
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger className="flex min-h-11 w-full max-w-full items-center gap-2 rounded-md px-1.5 text-left hover:bg-muted" aria-label={t('common.account')}>
+      <DropdownMenuTrigger className="flex min-h-11 w-full max-w-full items-center gap-2 rounded-md px-1.5 text-left text-sidebar-foreground hover:bg-sidebar-accent group-data-[collapsible=icon]/sidebar:justify-center group-data-[collapsible=icon]/sidebar:px-0" aria-label={t('common.account')}>
         <Avatar name={auth.user.name} className="size-8" />
-        <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{auth.user.name}</span><span className="block truncate text-xs text-muted-foreground">{t(`roles.${auth.user.role}`)}</span></span>
-        <ChevronUp className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <span className="min-w-0 flex-1 group-data-[collapsible=icon]/sidebar:sr-only"><span className="block truncate text-sm font-medium">{auth.user.name}</span><span className="block truncate text-xs text-sidebar-foreground/60">{t(`roles.${auth.user.role}`)}</span></span>
+        <ChevronUp className="size-4 shrink-0 text-sidebar-foreground/60 group-data-[collapsible=icon]/sidebar:hidden" aria-hidden="true" />
       </DropdownMenuTrigger>
       <DropdownMenuContent side="top" align="start" sideOffset={8} className="w-56">
         <DropdownMenuLabel className="py-2">

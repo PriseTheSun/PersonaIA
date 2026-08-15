@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -30,6 +30,16 @@ describe('AppShell', () => {
   beforeEach(() => {
     localStorage.clear();
     localStorage.setItem('personaia.locale', 'pt-BR');
+    vi.mocked(window.matchMedia).mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
   });
 
   it('places the account avatar in the sidebar and keeps settings in the header', () => {
@@ -48,5 +58,41 @@ describe('AppShell', () => {
 
     expect(screen.getByRole('status')).toHaveTextContent('Tudo em dia');
     expect(screen.getByRole('status')).toHaveTextContent('Novas atividades importantes aparecerão aqui.');
+  });
+
+  it('opens the complete sidebar as an off-canvas menu on mobile', async () => {
+    const user = userEvent.setup();
+    renderShell();
+
+    await user.click(screen.getByRole('button', { name: 'Abrir menu' }));
+    const mobileSidebar = screen.getByRole('dialog');
+
+    expect(within(mobileSidebar).getByText('Plataforma')).toBeVisible();
+    expect(within(mobileSidebar).getByRole('button', { name: 'Conta' })).toBeVisible();
+  });
+
+  it('collapses to icons on desktop, persists the state, and supports Ctrl+B', async () => {
+    vi.mocked(window.matchMedia).mockImplementation((query: string) => ({
+      matches: query === '(min-width: 1024px)',
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    const user = userEvent.setup();
+    renderShell();
+    const sidebar = document.querySelector('aside[data-sidebar="sidebar"]');
+    const header = document.querySelector('header');
+
+    expect(sidebar).toHaveAttribute('data-state', 'expanded');
+    await user.click(within(header as HTMLElement).getByRole('button', { name: 'Recolher sidebar' }));
+    expect(sidebar).toHaveAttribute('data-state', 'collapsed');
+    await waitFor(() => expect(localStorage.getItem('personaia.sidebar.open.v1')).toBe('false'));
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', ctrlKey: true }));
+    await waitFor(() => expect(sidebar).toHaveAttribute('data-state', 'expanded'));
   });
 });
