@@ -1,10 +1,12 @@
-import { createContext, useContext } from 'react';
+import { createContext, useContext, type Dispatch, type SetStateAction } from 'react';
 
 export type SidebarContextValue = {
+  state: 'expanded' | 'collapsed';
   open: boolean;
+  setOpen: Dispatch<SetStateAction<boolean>>;
   openMobile: boolean;
-  isDesktop: boolean;
-  setOpenMobile: (open: boolean) => void;
+  setOpenMobile: Dispatch<SetStateAction<boolean>>;
+  isMobile: boolean;
   toggleSidebar: () => void;
 };
 

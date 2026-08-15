@@ -8,7 +8,7 @@ const slides = [
   { image: '/images/auth/research-analysis.jpg', titleKey: 'authCarousel.researchTitle', descriptionKey: 'authCarousel.researchDescription' },
   { image: '/images/auth/audience-context.jpg', titleKey: 'authCarousel.personasTitle', descriptionKey: 'authCarousel.personasDescription' },
   { image: '/images/auth/research-decisions.jpg', titleKey: 'authCarousel.decisionsTitle', descriptionKey: 'authCarousel.decisionsDescription' },
-  { image: '/images/auth/persona-simulation.jpg', titleKey: 'authCarousel.simulationTitle', descriptionKey: 'authCarousel.simulationDescription' },
+  { image: '/images/auth/persona-simulation-v2.png', titleKey: 'authCarousel.simulationTitle', descriptionKey: 'authCarousel.simulationDescription' },
   { image: '/images/auth/project-governance.jpg', titleKey: 'authCarousel.governanceTitle', descriptionKey: 'authCarousel.governanceDescription' },
 ] as const;
 
@@ -60,34 +60,34 @@ export function AuthBrandPanel() {
         <div className="absolute inset-0 bg-secondary/30" />
       </div>
 
-      <div className="relative z-10 flex min-h-[626px] flex-col justify-between p-10 xl:p-12">
+      <div className="relative z-10 flex h-full min-h-[626px] flex-col justify-between p-10 xl:p-12">
         <AppLogo tone="inverse" />
-        <div className="max-w-md">
+        <div className="mt-auto max-w-md pb-16">
           <div key={activeSlide} className="auth-carousel-copy">
             <p className="text-sm font-medium text-secondary-foreground/80">{t('auth.brandKicker')}</p>
             <p className="mt-3 text-3xl font-semibold leading-[1.16] tracking-[-0.035em]">{t(active.titleKey)}</p>
             <p className="mt-3 max-w-[46ch] text-sm leading-6 text-secondary-foreground/80">{t(active.descriptionKey)}</p>
           </div>
+        </div>
 
-          <div className="mt-6 flex items-center gap-1" role="group" aria-label={t('authCarousel.controls')}>
-            {!reducedMotion ? (
-              <button type="button" className="grid size-11 place-items-center rounded-md text-secondary-foreground/80 transition-colors hover:bg-secondary-foreground/10 hover:text-secondary-foreground" aria-label={t(manuallyPaused ? 'authCarousel.play' : 'authCarousel.pause')} onClick={() => setManuallyPaused((paused) => !paused)}>
-                {manuallyPaused ? <Play className="size-4" fill="currentColor" aria-hidden="true" /> : <Pause className="size-4" fill="currentColor" aria-hidden="true" />}
-              </button>
-            ) : null}
-            {slides.map((slide, index) => (
-              <button
-                type="button"
-                key={slide.image}
-                className="grid size-11 place-items-center rounded-md"
-                aria-label={t('authCarousel.goToSlide', { number: index + 1, title: t(slide.titleKey) })}
-                aria-current={index === activeSlide ? 'true' : undefined}
-                onClick={() => setActiveSlide(index)}
-              >
-                <span className={cn('h-1.5 rounded-full bg-secondary-foreground/45 transition-[width,background-color] duration-200', index === activeSlide ? 'w-7 bg-secondary-foreground' : 'w-2')} aria-hidden="true" />
-              </button>
-            ))}
-          </div>
+        <div className="absolute inset-x-0 bottom-3 flex items-center justify-center gap-1" role="group" aria-label={t('authCarousel.controls')}>
+          {!reducedMotion ? (
+            <button type="button" className="grid size-11 place-items-center rounded-md text-secondary-foreground/80 transition-colors hover:bg-secondary-foreground/10 hover:text-secondary-foreground" aria-label={t(manuallyPaused ? 'authCarousel.play' : 'authCarousel.pause')} onClick={() => setManuallyPaused((paused) => !paused)}>
+              {manuallyPaused ? <Play className="size-4" fill="currentColor" aria-hidden="true" /> : <Pause className="size-4" fill="currentColor" aria-hidden="true" />}
+            </button>
+          ) : null}
+          {slides.map((slide, index) => (
+            <button
+              type="button"
+              key={slide.image}
+              className="grid size-11 place-items-center rounded-md"
+              aria-label={t('authCarousel.goToSlide', { number: index + 1, title: t(slide.titleKey) })}
+              aria-current={index === activeSlide ? 'true' : undefined}
+              onClick={() => setActiveSlide(index)}
+            >
+              <span className={cn('h-1.5 rounded-full bg-secondary-foreground/45 transition-[width,background-color] duration-200', index === activeSlide ? 'w-7 bg-secondary-foreground' : 'w-2')} aria-hidden="true" />
+            </button>
+          ))}
         </div>
       </div>
     </aside>

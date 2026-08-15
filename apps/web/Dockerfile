@@ -7,6 +7,7 @@ RUN npm ci --ignore-scripts && npm cache clean --force
 
 COPY index.html postcss.config.js tailwind.config.ts tsconfig.json tsconfig.app.json tsconfig.node.json vite.config.ts ./
 COPY src ./src
+COPY public ./public
 
 RUN npm run build
 

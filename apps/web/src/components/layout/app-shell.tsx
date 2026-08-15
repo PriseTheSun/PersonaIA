@@ -15,19 +15,19 @@ export function AppShell() {
   if (auth.status !== 'authenticated') return null;
   return (
     <SidebarProvider>
-      <Sidebar mobileTitle={t('common.menu')} mobileDescription={t('common.appName')}>
-        <SidebarHeader>
-          <span className="group-data-[collapsible=icon]/sidebar:hidden"><AppLogo /></span>
-          <span className="hidden group-data-[collapsible=icon]/sidebar:block"><AppLogo compact /></span>
+      <Sidebar collapsible="icon" mobileTitle={t('common.menu')} mobileDescription={t('common.appName')}>
+        <SidebarHeader className="border-b border-sidebar-border">
+          <span className="group-data-[collapsible=icon]:hidden"><AppLogo /></span>
+          <span className="hidden group-data-[collapsible=icon]:block"><AppLogo compact /></span>
         </SidebarHeader>
         <SidebarContent><Navigation role={auth.user.role} /></SidebarContent>
-        <SidebarFooter><AccountMenu /></SidebarFooter>
-        <SidebarRail openLabel={t('common.expandSidebar')} closeLabel={t('common.collapseSidebar')} />
+        <SidebarFooter className="border-t border-sidebar-border"><AccountMenu /></SidebarFooter>
+        <SidebarRail label={t('common.collapseSidebar')} />
       </Sidebar>
       <SidebarInset>
-        <header className="sticky top-0 z-sticky flex h-16 items-center justify-between gap-2 border-b bg-background/95 px-3 backdrop-blur-sm sm:px-6 lg:px-8">
+        <header className="sticky top-0 z-sticky flex h-16 shrink-0 items-center justify-between gap-2 border-b bg-background/95 px-3 backdrop-blur-sm transition-[width,height] ease-linear group-has-[[data-collapsible=icon]]/sidebar-wrapper:h-12 sm:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-2">
-            <SidebarTrigger openLabel={t('common.expandSidebar')} closeLabel={t('common.collapseSidebar')} menuLabel={t('common.openMenu')} />
+            <SidebarTrigger label={t('common.openMenu')} />
             <span className="lg:hidden"><AppLogo compact /></span>
             <p className="hidden truncate text-sm text-muted-foreground lg:block">{t(`roles.${auth.user.role}`)}</p>
           </div>

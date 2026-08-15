@@ -64,6 +64,8 @@ describe('LoginPage', () => {
     const user = userEvent.setup();
     renderLogin();
     const carousel = screen.getByRole('complementary', { name: 'Recursos da PersonaIA' });
+    expect(within(carousel).getByRole('group', { name: 'Controles do carrossel' })).toHaveClass('absolute', 'bottom-3');
+    expect(within(carousel).getByRole('group', { name: 'Controles do carrossel' }).parentElement).toHaveClass('h-full');
 
     expect(within(carousel).getByText('Entenda o que as pessoas realmente dizem')).toBeInTheDocument();
     expect(within(carousel).getAllByRole('button', { name: /Ver slide/ })).toHaveLength(5);

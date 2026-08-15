@@ -50,7 +50,7 @@ describe('AppShell', () => {
   it('places the account avatar in the sidebar and keeps settings in the header', () => {
     renderShell();
 
-    expect(screen.getByRole('button', { name: 'Conta' }).closest('aside')).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Conta' }).closest('[data-sidebar="sidebar"]')).not.toBeNull();
     expect(screen.getByRole('button', { name: 'Idioma' }).closest('header')).not.toBeNull();
     expect(screen.getByRole('button', { name: 'Tema' }).closest('header')).not.toBeNull();
   });
@@ -59,9 +59,10 @@ describe('AppShell', () => {
     renderShell();
     const accessLink = screen.getByRole('link', { name: 'Controle de acessos' });
 
-    expect(accessLink).toHaveClass('flex', 'w-full', 'flex-nowrap', 'whitespace-nowrap');
+    expect(accessLink).toHaveClass('flex', 'w-full', 'overflow-hidden');
+    expect(accessLink).toHaveAttribute('data-sidebar', 'menu-button');
     expect(accessLink.className).not.toContain('({ isActive })');
-    expect(within(accessLink).getByText('Controle de acessos')).toHaveClass('truncate', 'whitespace-nowrap');
+    expect(within(accessLink).getByText('Controle de acessos')).toBeVisible();
   });
 
   it('opens the notification panel with an accessible empty state', async () => {
@@ -98,19 +99,8 @@ describe('AppShell', () => {
   });
 
   it('opens the complete sidebar as an off-canvas menu on mobile', async () => {
-    const user = userEvent.setup();
-    renderShell();
-
-    await user.click(screen.getByRole('button', { name: 'Abrir menu' }));
-    const mobileSidebar = screen.getByRole('dialog');
-
-    expect(within(mobileSidebar).getByText('Plataforma')).toBeVisible();
-    expect(within(mobileSidebar).getByRole('button', { name: 'Conta' })).toBeVisible();
-  });
-
-  it('collapses to icons on desktop, persists the state, and supports Ctrl+B', async () => {
     vi.mocked(window.matchMedia).mockImplementation((query: string) => ({
-      matches: query === '(min-width: 1024px)',
+      matches: query === '(max-width: 767px)',
       media: query,
       onchange: null,
       addListener: vi.fn(),
@@ -121,11 +111,35 @@ describe('AppShell', () => {
     }));
     const user = userEvent.setup();
     renderShell();
-    const sidebar = document.querySelector('aside[data-sidebar="sidebar"]');
+
+    await user.click(screen.getByRole('button', { name: 'Abrir menu' }));
+    const mobileSidebar = screen.getByRole('dialog');
+
+    expect(within(mobileSidebar).getByText('Plataforma')).toBeVisible();
+    expect(within(mobileSidebar).getByRole('button', { name: 'Conta' })).toBeVisible();
+
+    await user.click(within(mobileSidebar).getByRole('link', { name: 'Visão geral' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('collapses to icons on desktop, persists the state, and supports Ctrl+B', async () => {
+    vi.mocked(window.matchMedia).mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    const user = userEvent.setup();
+    renderShell();
+    const sidebar = document.querySelector('[data-state="expanded"][data-collapsible]');
     const header = document.querySelector('header');
 
     expect(sidebar).toHaveAttribute('data-state', 'expanded');
-    await user.click(within(header as HTMLElement).getByRole('button', { name: 'Recolher sidebar' }));
+    await user.click(within(header as HTMLElement).getByRole('button', { name: 'Abrir menu' }));
     expect(sidebar).toHaveAttribute('data-state', 'collapsed');
     await waitFor(() => expect(localStorage.getItem('personaia.sidebar.open.v1')).toBe('false'));
 
