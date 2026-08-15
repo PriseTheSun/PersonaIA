@@ -29,7 +29,7 @@ export function ProjectsPage() {
   const { tenantId, workspaceId } = useActiveScope();
   const [search, setSearch] = useState('');
   const [creating, setCreating] = useState(false);
-  const query = useApiQuery((signal) => tenantId ? apiRequest(`/projects${workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : ''}`, responseSchema, { signal }) : Promise.resolve([]), [tenantId, workspaceId]);
+  const query = useApiQuery((signal) => tenantId ? apiRequest(`/projects?${workspaceId ? `workspaceId=${encodeURIComponent(workspaceId)}` : `tenantId=${encodeURIComponent(tenantId)}`}`, responseSchema, { signal }) : Promise.resolve([]), [tenantId, workspaceId]);
   const workspacesQuery = useApiQuery((signal) => tenantId ? apiRequest(`/tenants/${encodeURIComponent(tenantId)}/workspaces`, workspacesResponseSchema, { signal }) : Promise.resolve([]), [tenantId]);
   const items = useMemo(() => query.status === 'success' ? query.data.filter((project) => (!workspaceId || project.workspaceId === undefined || project.workspaceId === workspaceId) && project.name.toLowerCase().includes(search.toLowerCase())) : [], [query, search, workspaceId]);
   const currentWorkspace = auth.activeContext?.workspaces.find((workspace) => workspace.id === workspaceId);
