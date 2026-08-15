@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
 import { createConnection } from 'node:net';
 import { dirname, join } from 'node:path';
@@ -12,7 +12,21 @@ if (!existsSync(envPath)) {
   process.exit(1);
 }
 
-process.loadEnvFile(envPath);
+const fileEnvironment = Object.fromEntries(readFileSync(envPath, 'utf8')
+  .split(/\r?\n/)
+  .map((line) => line.trim())
+  .filter((line) => line && !line.startsWith('#') && line.includes('='))
+  .map((line) => {
+    const separator = line.indexOf('=');
+    const key = line.slice(0, separator).trim();
+    let value = line.slice(separator + 1).trim();
+    const quote = value[0];
+    if ((quote === '"' || quote === "'") && value.endsWith(quote)) value = value.slice(1, -1);
+    else value = value.replace(/\s+#.*$/, '').trim();
+    return [key, value];
+  }));
+
+const localEnvironment = { ...process.env, ...fileEnvironment };
 
 const requiredVariables = [
   'POSTGRES_DB',
@@ -26,8 +40,8 @@ const requiredVariables = [
   'SUPER_ADMIN_PASSWORD',
 ];
 const invalidVariables = requiredVariables.filter((name) => {
-  const value = process.env[name];
-  return !value || value.includes('REPLACE_');
+  const value = localEnvironment[name];
+  return !value || value.includes('REPLACE_') || (name === 'SUPER_ADMIN_PASSWORD' && value.length < 12);
 });
 
 if (invalidVariables.length > 0) {
@@ -35,22 +49,22 @@ if (invalidVariables.length > 0) {
   process.exit(1);
 }
 
-const databasePort = process.env.POSTGRES_DEV_PORT ?? '5433';
+const databasePort = localEnvironment.POSTGRES_DEV_PORT ?? '5433';
 const databaseUrl = new URL('postgresql://127.0.0.1');
-databaseUrl.username = process.env.APP_DB_USER;
-databaseUrl.password = process.env.APP_DB_PASSWORD;
+databaseUrl.username = localEnvironment.APP_DB_USER;
+databaseUrl.password = localEnvironment.APP_DB_PASSWORD;
 databaseUrl.port = databasePort;
-databaseUrl.pathname = `/${process.env.POSTGRES_DB}`;
+databaseUrl.pathname = `/${localEnvironment.POSTGRES_DB}`;
 databaseUrl.searchParams.set('schema', 'public');
 
 const localOrigins = ['http://localhost:5173', 'http://127.0.0.1:5173'];
-const configuredOrigins = (process.env.CORS_ORIGINS ?? '')
+const configuredOrigins = (localEnvironment.CORS_ORIGINS ?? '')
   .split(',')
   .map((origin) => origin.trim())
   .filter(Boolean);
 
 const developmentEnvironment = {
-  ...process.env,
+  ...localEnvironment,
   NODE_ENV: 'development',
   PORT: '3001',
   DATABASE_URL: databaseUrl.toString(),

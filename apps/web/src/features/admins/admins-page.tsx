@@ -1,10 +1,11 @@
 import { Plus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import { z } from 'zod';
 import { Avatar } from '@/components/shared/avatar';
 import { DataRegion } from '@/components/shared/data-region';
-import { InlineForm, MutationNotice } from '@/components/shared/inline-form';
+import { InlineForm } from '@/components/shared/inline-form';
 import { EmptyState, ErrorState, LoadingRows } from '@/components/shared/states';
 import { PageHeader } from '@/components/shared/page-header';
 import { SearchField } from '@/components/shared/search-field';
@@ -25,16 +26,14 @@ export function AdminsPage() {
   const { t, i18n } = useTranslation();
   const [search, setSearch] = useState('');
   const [creating, setCreating] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
   const query = useApiQuery((signal) => apiRequest('/client-admins', responseSchema, { signal }));
   const tenantsQuery = useApiQuery((signal) => apiRequest('/tenants', tenantResponseSchema, { signal }));
   const items = useMemo(() => query.status === 'success' ? query.data.filter((admin) => `${admin.name} ${admin.email}`.toLowerCase().includes(search.toLowerCase())) : [], [query, search]);
   useEffect(() => { document.title = `${t('admins.title')} · ${t('common.appName')}`; }, [t]);
   return (
     <div className="space-y-6">
-      <PageHeader title={t('admins.title')} description={t('admins.description')} action={<Button onClick={() => { setCreating(true); setNotice(null); }} disabled={tenantsQuery.status !== 'success' || tenantsQuery.data.length === 0}><Plus />{t('admins.create')}</Button>} />
-      <MutationNotice message={notice} />
-      {creating && tenantsQuery.status === 'success' ? <InlineForm title={t('forms.createAdminTitle')} description={t('forms.createAdminDescription')} onClose={() => setCreating(false)}><CreateAdminForm tenants={tenantsQuery.data} onCancel={() => setCreating(false)} onCreated={() => { setCreating(false); setNotice(t('forms.created')); query.retry(); }} /></InlineForm> : null}
+      <PageHeader title={t('admins.title')} description={t('admins.description')} action={<Button onClick={() => setCreating(true)} disabled={tenantsQuery.status !== 'success' || tenantsQuery.data.length === 0}><Plus />{t('admins.create')}</Button>} />
+      {creating && tenantsQuery.status === 'success' ? <InlineForm title={t('forms.createAdminTitle')} description={t('forms.createAdminDescription')} onClose={() => setCreating(false)}><CreateAdminForm tenants={tenantsQuery.data} onCancel={() => setCreating(false)} onCreated={() => { setCreating(false); toast.success(t('forms.created')); query.retry(); }} /></InlineForm> : null}
       <DataRegion toolbar={<SearchField value={search} onChange={setSearch} placeholder={t('admins.search')} />}>
         {query.status === 'loading' ? <LoadingRows /> : query.status === 'error' ? <ErrorState onRetry={query.retry} /> : items.length === 0 ? <EmptyState title={search ? t('common.noResults') : t('admins.empty')} description={t('admins.emptyDescription')} /> : (
           <Table><TableHeader><TableRow><TableHead>{t('admins.columns.admin')}</TableHead><TableHead>{t('admins.columns.tenant')}</TableHead><TableHead>{t('admins.columns.status')}</TableHead><TableHead className="hidden md:table-cell">{t('admins.columns.created')}</TableHead></TableRow></TableHeader>

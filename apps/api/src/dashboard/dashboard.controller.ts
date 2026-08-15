@@ -4,7 +4,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { Principal } from '../common/types/principal';
 import { DashboardService } from './dashboard.service';
 
-@Roles('SUPER_ADMIN', 'CLIENT_ADMIN')
+@Roles('SUPER_ADMIN', 'CLIENT_ADMIN', 'PROJECT_USER')
 @Controller('dashboard')
 export class DashboardController {
   constructor(private readonly dashboard: DashboardService) {}

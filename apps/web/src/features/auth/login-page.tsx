@@ -3,7 +3,7 @@ import { ArrowRight, LockKeyhole } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
-import { Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { AppLogo } from '@/components/shared/app-logo';
 import { LanguageSelector } from '@/components/shared/language-selector';
 import { ThemeSelector } from '@/components/shared/theme-selector';
@@ -37,7 +37,9 @@ export function LoginPage() {
       const destination = (location.state as { from?: { pathname?: string } } | null)?.from?.pathname ?? '/';
       navigate(destination, { replace: true });
     } catch (error) {
-      setServerError(error instanceof ApiError && error.status === 401 ? t('auth.invalidCredentials') : t('auth.genericError'));
+      if (error instanceof ApiError && error.code === 'ACCOUNT_PENDING') setServerError(t('auth.pendingApproval'));
+      else if (error instanceof ApiError && error.code === 'ACCOUNT_INACTIVE') setServerError(t('auth.inactiveAccount'));
+      else setServerError(error instanceof ApiError && error.status === 401 ? t('auth.invalidCredentials') : t('auth.genericError'));
     }
   });
 
@@ -65,6 +67,7 @@ export function LoginPage() {
           <Button type="submit" size="lg" className="w-full" loading={isSubmitting}>{isSubmitting ? t('auth.submitting') : t('auth.submit')} {!isSubmitting ? <ArrowRight aria-hidden="true" /> : null}</Button>
         </form>
         <p className="mt-6 flex gap-2 text-xs leading-5 text-muted-foreground"><LockKeyhole className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />{t('auth.secureSession')}</p>
+        <p className="mt-5 border-t pt-5 text-center text-sm text-muted-foreground">{t('registration.noAccount')} <Link to="/register" className="font-medium text-primary hover:underline">{t('registration.createAccount')}</Link></p>
       </section>
     </main>
   );

@@ -10,11 +10,19 @@ import { newCsrfToken } from '../common/security';
 import { Roles } from '../common/decorators/roles.decorator';
 import { ZodValidationPipe } from '../common/zod-validation.pipe';
 import { AuthService } from './auth.service';
-import { LoginInput, loginSchema } from './auth.schemas';
+import { LoginInput, loginSchema, RegisterInput, registerSchema } from './auth.schemas';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService, private readonly config: ConfigService) {}
+
+  @Public()
+  @CsrfExempt()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('register')
+  register(@Body(new ZodValidationPipe(registerSchema)) input: RegisterInput) {
+    return this.auth.register(input);
+  }
 
   @Public()
   @CsrfExempt()

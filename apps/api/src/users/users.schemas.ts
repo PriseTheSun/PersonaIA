@@ -15,5 +15,12 @@ export const updateProjectUserSchema = z.object({
   password: passwordSchema.optional()
 }).strict().refine((value) => Object.keys(value).length > 0, 'Informe ao menos um campo.');
 
+export const updateUserAccessSchema = z.object({
+  status: z.enum(['ACTIVE', 'SUSPENDED']).optional(),
+  role: z.enum(['SUPER_ADMIN', 'CLIENT_ADMIN', 'PROJECT_USER']).optional(),
+  tenantId: z.string().uuid().nullable().optional()
+}).strict().refine((value) => Object.keys(value).length > 0, 'Informe ao menos um campo.');
+
 export type CreateProjectUserInput = z.infer<typeof createProjectUserSchema>;
 export type UpdateProjectUserInput = z.infer<typeof updateProjectUserSchema>;
+export type UpdateUserAccessInput = z.infer<typeof updateUserAccessSchema>;

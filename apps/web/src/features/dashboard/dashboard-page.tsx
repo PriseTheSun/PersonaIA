@@ -17,17 +17,19 @@ export function DashboardPage() {
   const auth = useAuth();
   const query = useApiQuery((signal) => apiRequest('/dashboard/summary', dashboardSummarySchema, { signal }));
   const isSuperAdmin = auth.status === 'authenticated' && auth.user.role === 'SUPER_ADMIN';
+  const isProjectUser = auth.status === 'authenticated' && auth.user.role === 'PROJECT_USER';
   useEffect(() => { document.title = `${t('dashboard.title')} · ${t('common.appName')}`; }, [t]);
   const metrics = isSuperAdmin
     ? [{ key: 'tenants', icon: Building2 }, { key: 'clientAdmins', icon: ShieldCheck }]
-    : [{ key: 'projects', icon: FolderKanban }, { key: 'users', icon: Users }, { key: 'activePersonas', icon: UserRoundCog }];
+    : isProjectUser ? [{ key: 'projects', icon: FolderKanban }]
+      : [{ key: 'projects', icon: FolderKanban }, { key: 'users', icon: Users }, { key: 'activePersonas', icon: UserRoundCog }];
   const labels: Record<string, string> = { tenants: 'dashboard.tenants', clientAdmins: 'dashboard.admins', projects: 'dashboard.projects', users: 'dashboard.users', activePersonas: 'dashboard.personas' };
   const actions = isSuperAdmin
     ? [{ label: 'dashboard.createTenant', to: '/tenants', icon: Building2 }, { label: 'dashboard.createAdmin', to: '/administrators', icon: ShieldCheck }]
-    : [{ label: 'dashboard.createProject', to: '/projects', icon: FolderKanban }, { label: 'dashboard.manageUsers', to: '/users', icon: Users }];
+    : isProjectUser ? [] : [{ label: 'dashboard.createProject', to: '/projects', icon: FolderKanban }, { label: 'dashboard.manageUsers', to: '/users', icon: Users }];
   return (
     <div className="space-y-7">
-      <PageHeader title={t('dashboard.title')} description={t(isSuperAdmin ? 'dashboard.superDescription' : 'dashboard.clientDescription')} />
+      <PageHeader title={t('dashboard.title')} description={t(isSuperAdmin ? 'dashboard.superDescription' : isProjectUser ? 'dashboard.userDescription' : 'dashboard.clientDescription')} />
       {query.status === 'error' ? <div className="rounded-lg border"><ErrorState onRetry={query.retry} /></div> : (
         <>
           <section className="grid overflow-hidden rounded-lg border bg-card sm:grid-cols-2 lg:grid-cols-3" aria-label={t('dashboard.title')}>
@@ -38,17 +40,17 @@ export function DashboardPage() {
               </div>
             ))}
           </section>
-          <div className="grid gap-7 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className={actions.length ? 'grid gap-7 lg:grid-cols-[minmax(0,1fr)_320px]' : 'grid gap-7'}>
             <section className="overflow-hidden rounded-lg border bg-card">
               <div className="border-b px-4 py-4 sm:px-5"><h2 className="font-semibold">{t('dashboard.activity')}</h2></div>
               {query.status === 'loading' ? <LoadingRows rows={4} /> : query.data.recentActivity.length === 0 ? <EmptyState title={t('dashboard.noActivity')} description={t('dashboard.noActivityDescription')} /> : (
                 <ul className="divide-y">{query.data.recentActivity.map((item) => <li key={item.id} className="flex items-start justify-between gap-4 px-4 py-4 sm:px-5"><span className="text-sm">{item.label}</span><time className="shrink-0 text-xs text-muted-foreground" dateTime={item.createdAt}>{formatDate(item.createdAt, i18n.language)}</time></li>)}</ul>
               )}
             </section>
-            <section aria-labelledby="quick-actions-title">
+            {actions.length ? <section aria-labelledby="quick-actions-title">
               <h2 id="quick-actions-title" className="mb-3 text-sm font-semibold">{t('dashboard.quickActions')}</h2>
               <div className="divide-y rounded-lg border bg-card">{actions.map(({ label, to, icon: Icon }) => <Button asChild variant="ghost" className="h-auto min-h-14 w-full justify-start rounded-none px-4 first:rounded-t-lg last:rounded-b-lg" key={label}><Link to={to}><Icon aria-hidden="true" />{t(label)}<ArrowRight className="ml-auto" aria-hidden="true" /></Link></Button>)}</div>
-            </section>
+            </section> : null}
           </div>
         </>
       )}

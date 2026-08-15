@@ -4,6 +4,7 @@ import { RouterProvider } from 'react-router-dom';
 import { AuthProvider } from '@/features/auth/auth-context';
 import { I18nProvider } from '@/i18n/i18n-provider';
 import { router } from '@/router';
+import { AppToaster } from '@/components/ui/sonner';
 import '@/styles/globals.css';
 
 const root = document.getElementById('root');
@@ -17,6 +18,7 @@ createRoot(root).render(
     <I18nProvider>
       <AuthProvider>
         <RouterProvider router={router} />
+        <AppToaster />
       </AuthProvider>
     </I18nProvider>
   </StrictMode>,

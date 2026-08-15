@@ -18,6 +18,12 @@ export class DashboardService {
       ]);
       return { tenants, clientAdmins, projects, users, recentActivity: recent };
     }
+    if (actor.role === Role.PROJECT_USER) {
+      const projects = await this.prisma.projectMembership.count({
+        where: { userId: actor.id, tenantId: actor.tenantId! }
+      });
+      return { tenants: 0, clientAdmins: 0, projects, users: 0, recentActivity: [] };
+    }
     const tenantId = actor.tenantId!;
     const [projects, users, memberships, recent] = await Promise.all([
       this.prisma.project.count({ where: { tenantId } }),

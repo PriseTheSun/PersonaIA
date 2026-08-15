@@ -5,11 +5,11 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 type Theme = 'light' | 'dark' | 'system';
-const KEY = 'personaia.theme';
+const KEY = 'personaia.theme.v2';
 
 function getTheme(): Theme {
   const value = localStorage.getItem(KEY);
-  return value === 'light' || value === 'dark' ? value : 'system';
+  return value === 'light' || value === 'dark' || value === 'system' ? value : 'light';
 }
 
 function applyTheme(theme: Theme) {

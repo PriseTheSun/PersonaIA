@@ -1,4 +1,5 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import * as argon2 from 'argon2';
 import { AuthService } from './auth.service';
 
 describe('AuthService refresh reuse detection', () => {
@@ -26,5 +27,47 @@ describe('AuthService refresh reuse detection', () => {
     await expect(service.refresh('replayed-token', {})).rejects.toBeInstanceOf(UnauthorizedException);
     expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ familyId: '20000000-0000-4000-8000-000000000002' }) }));
     expect(incrementVersion).toHaveBeenCalledWith(expect.objectContaining({ data: { tokenVersion: { increment: 1 } } }));
+  });
+});
+
+describe('AuthService account approval', () => {
+  it('creates self-registrations as pending project users and audits the request', async () => {
+    const tx = {
+      user: { create: jest.fn().mockResolvedValue({ id: '30000000-0000-4000-8000-000000000003' }) },
+      auditLog: { create: jest.fn().mockResolvedValue({}) }
+    };
+    const prisma = {
+      tenant: { findFirst: jest.fn().mockResolvedValue({ id: '10000000-0000-4000-8000-000000000001' }) },
+      $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx))
+    };
+    const service = new AuthService(prisma as never, {} as never, {} as never);
+
+    await expect(service.register({
+      name: 'Pessoa Teste', email: 'Pessoa@Teste.dev', password: 'UmaSenha#MuitoForte2026', tenantSlug: 'cliente-teste'
+    })).resolves.toEqual({ status: 'PENDING' });
+    expect(tx.user.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ email: 'pessoa@teste.dev', role: 'PROJECT_USER', status: 'PENDING' })
+    }));
+    expect(tx.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'USER_REGISTERED' }) }));
+  });
+
+  it('refuses login with the correct password while approval is pending', async () => {
+    const passwordHash = await argon2.hash('UmaSenha#MuitoForte2026', { type: argon2.argon2id });
+    const prisma = {
+      user: { findUnique: jest.fn().mockResolvedValue({
+        id: '30000000-0000-4000-8000-000000000003', tenantId: '10000000-0000-4000-8000-000000000001',
+        name: 'Pessoa Teste', email: 'pessoa@teste.dev', passwordHash, role: 'PROJECT_USER', status: 'PENDING', tokenVersion: 0,
+        tenant: { status: 'ACTIVE' }
+      }) }
+    };
+    const service = new AuthService(prisma as never, {} as never, {} as never);
+
+    try {
+      await service.login({ email: 'pessoa@teste.dev', password: 'UmaSenha#MuitoForte2026' }, {});
+      throw new Error('O login pendente deveria ter sido recusado.');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ForbiddenException);
+      expect((error as ForbiddenException).getResponse()).toEqual(expect.objectContaining({ code: 'ACCOUNT_PENDING' }));
+    }
   });
 });

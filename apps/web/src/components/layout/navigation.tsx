@@ -1,11 +1,12 @@
-import { FolderKanban, Gauge, KeyRound, ShieldCheck, Users, Building2 } from 'lucide-react';
+import { FolderKanban, Gauge, KeyRound, ShieldCheck, Users, Building2, UserRoundCog } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { NavLink } from 'react-router-dom';
 import type { Role } from '@/lib/schemas';
 import { cn } from '@/lib/utils';
 
 const items = [
-  { to: '/', label: 'nav.overview', icon: Gauge, roles: ['SUPER_ADMIN', 'CLIENT_ADMIN'] },
+  { to: '/', label: 'nav.overview', icon: Gauge, roles: ['SUPER_ADMIN', 'CLIENT_ADMIN', 'PROJECT_USER'] },
+  { to: '/access-control', label: 'nav.accessControl', icon: UserRoundCog, roles: ['SUPER_ADMIN', 'CLIENT_ADMIN'] },
   { to: '/tenants', label: 'nav.tenants', icon: Building2, roles: ['SUPER_ADMIN'] },
   { to: '/administrators', label: 'nav.admins', icon: ShieldCheck, roles: ['SUPER_ADMIN'] },
   { to: '/projects', label: 'nav.projects', icon: FolderKanban, roles: ['CLIENT_ADMIN'] },

@@ -1,10 +1,11 @@
 import { ArrowRight, FolderKanban, Plus, Users } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
 import { z } from 'zod';
 import { DataRegion } from '@/components/shared/data-region';
-import { InlineForm, MutationNotice } from '@/components/shared/inline-form';
+import { InlineForm } from '@/components/shared/inline-form';
 import { EmptyState, ErrorState, LoadingRows } from '@/components/shared/states';
 import { PageHeader } from '@/components/shared/page-header';
 import { SearchField } from '@/components/shared/search-field';
@@ -22,15 +23,13 @@ export function ProjectsPage() {
   const { t, i18n } = useTranslation();
   const [search, setSearch] = useState('');
   const [creating, setCreating] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
   const query = useApiQuery((signal) => apiRequest('/projects', responseSchema, { signal }));
   const items = useMemo(() => query.status === 'success' ? query.data.filter((project) => project.name.toLowerCase().includes(search.toLowerCase())) : [], [query, search]);
   useEffect(() => { document.title = `${t('projects.title')} · ${t('common.appName')}`; }, [t]);
   return (
     <div className="space-y-6">
-      <PageHeader title={t('projects.title')} description={t('projects.description')} action={<Button onClick={() => { setCreating(true); setNotice(null); }}><Plus />{t('projects.create')}</Button>} />
-      <MutationNotice message={notice} />
-      {creating ? <InlineForm title={t('forms.createProjectTitle')} description={t('forms.createProjectDescription')} onClose={() => setCreating(false)}><CreateProjectForm onCancel={() => setCreating(false)} onCreated={() => { setCreating(false); setNotice(t('forms.created')); query.retry(); }} /></InlineForm> : null}
+      <PageHeader title={t('projects.title')} description={t('projects.description')} action={<Button onClick={() => setCreating(true)}><Plus />{t('projects.create')}</Button>} />
+      {creating ? <InlineForm title={t('forms.createProjectTitle')} description={t('forms.createProjectDescription')} onClose={() => setCreating(false)}><CreateProjectForm onCancel={() => setCreating(false)} onCreated={() => { setCreating(false); toast.success(t('forms.created')); query.retry(); }} /></InlineForm> : null}
       <DataRegion toolbar={<SearchField value={search} onChange={setSearch} placeholder={t('projects.search')} />}>
         {query.status === 'loading' ? <LoadingRows /> : query.status === 'error' ? <ErrorState onRetry={query.retry} /> : items.length === 0 ? <EmptyState title={search ? t('common.noResults') : t('projects.empty')} description={t('projects.emptyDescription')} /> : (
           <ul className="divide-y">{items.map((project) => (

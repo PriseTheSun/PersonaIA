@@ -38,7 +38,7 @@ export function AppShell() {
             </Dialog>
             <AppLogo compact />
           </div>
-          <div className="hidden min-w-0 lg:block"><p className="truncate text-sm text-muted-foreground">{auth.user.tenantId ? t('roles.CLIENT_ADMIN') : t('roles.SUPER_ADMIN')}</p></div>
+          <div className="hidden min-w-0 lg:block"><p className="truncate text-sm text-muted-foreground">{t(`roles.${auth.user.role}`)}</p></div>
           <div className="ml-auto flex items-center gap-0.5"><LanguageSelector /><ThemeSelector /><AccountMenu /></div>
         </header>
         <main id="main-content" className="mx-auto w-full max-w-[1440px] px-3 py-5 sm:px-6 sm:py-7 lg:px-8 lg:py-8">

@@ -1,12 +1,12 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { RecordStatus } from '@prisma/client';
+import { Prisma, RecordStatus, Role } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { hashToken, normalizeEmail, redactUser } from '../common/security';
-import { LoginInput } from './auth.schemas';
+import { LoginInput, RegisterInput } from './auth.schemas';
 
 interface SessionContext { userAgent?: string; ipAddress?: string }
 interface RefreshPayload { sub: string; sid: string; fid: string; type: 'refresh'; ver: number }
@@ -17,12 +17,57 @@ export class AuthService {
 
   constructor(private readonly prisma: PrismaService, private readonly jwt: JwtService, private readonly config: ConfigService) {}
 
+  async register(input: RegisterInput) {
+    const tenant = await this.prisma.tenant.findFirst({
+      where: { slug: input.tenantSlug, status: RecordStatus.ACTIVE },
+      select: { id: true }
+    });
+    if (!tenant) throw new BadRequestException({ code: 'INVALID_TENANT', message: 'Código da organização inválido.' });
+
+    const passwordHash = await argon2.hash(input.password, {
+      type: argon2.argon2id, memoryCost: 65_536, timeCost: 3, parallelism: 1
+    });
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        const user = await tx.user.create({
+          data: {
+            tenantId: tenant.id,
+            name: input.name.trim(),
+            email: normalizeEmail(input.email),
+            passwordHash,
+            role: Role.PROJECT_USER,
+            status: RecordStatus.PENDING
+          }
+        });
+        await tx.auditLog.create({
+          data: {
+            tenantId: tenant.id,
+            action: 'USER_REGISTERED',
+            targetType: 'User',
+            targetId: user.id,
+            metadata: { source: 'SELF_REGISTRATION' }
+          }
+        });
+      });
+    } catch (error) {
+      // A resposta idempotente impede enumeração pública de e-mails existentes.
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')) throw error;
+    }
+    return { status: 'PENDING' as const };
+  }
+
   async login(input: LoginInput, context: SessionContext) {
     const user = await this.prisma.user.findUnique({ where: { email: normalizeEmail(input.email) }, include: { tenant: true } });
     const hash = user?.passwordHash ?? await this.dummyHash;
     const matches = await argon2.verify(hash, input.password).catch(() => false);
-    if (!user || !matches || user.status !== RecordStatus.ACTIVE || (user.tenant && user.tenant.status !== RecordStatus.ACTIVE)) {
+    if (!user || !matches) {
       throw new UnauthorizedException('E-mail ou senha inválidos.');
+    }
+    if (user.status === RecordStatus.PENDING) {
+      throw new ForbiddenException({ code: 'ACCOUNT_PENDING', message: 'Cadastro aguardando aprovação.' });
+    }
+    if (user.status !== RecordStatus.ACTIVE || (user.tenant && user.tenant.status !== RecordStatus.ACTIVE)) {
+      throw new ForbiddenException({ code: 'ACCOUNT_INACTIVE', message: 'Conta inativa.' });
     }
     await this.prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
     const tokens = await this.issueSession(user, context);
