@@ -1,24 +1,20 @@
-import { Bell, CheckCheck, FolderClock, UserRoundPlus } from 'lucide-react';
+import { Bell, CheckCheck } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
+import { NotificationContent } from '@/features/notifications/notification-content';
+import { notificationDestination } from '@/features/notifications/notification-destination';
 import { apiRequest, apiVoid, csrfHeaders } from '@/lib/api';
 import { notificationsResponseSchema, type AppNotification } from '@/lib/schemas';
-import { cn, formatDate } from '@/lib/utils';
 
 const POLL_INTERVAL_MS = 30_000;
 
-function payloadText(notification: AppNotification, key: string) {
-  const value = notification.payload[key];
-  return typeof value === 'string' ? value : '';
-}
-
 export function NotificationsMenu() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const mounted = useRef(true);
   const [markingAll, setMarkingAll] = useState(false);
@@ -28,7 +24,7 @@ export function NotificationsMenu() {
 
   const refresh = useCallback(async () => {
     try {
-      const next = await apiRequest('/notifications', notificationsResponseSchema);
+      const next = await apiRequest('/notifications?page=1&pageSize=10&status=ALL', notificationsResponseSchema);
       if (mounted.current) {
         setNotifications(next);
         setLoadError(false);
@@ -70,10 +66,8 @@ export function NotificationsMenu() {
         toast.error(t('notifications.updateError'));
       }
     }
-    const next = new URLSearchParams({ status: notification.resolvedAt ? 'ALL' : 'PENDING' });
-    if (notification.tenantId) next.set('tenant', notification.tenantId);
-    else next.set('view', 'PLATFORM');
-    navigate(`/access-control?${next.toString()}`);
+    const destination = notificationDestination(notification);
+    if (destination) navigate(destination);
     await refresh();
   };
 
@@ -121,52 +115,21 @@ export function NotificationsMenu() {
           </div>
         ) : (
           <div className="max-h-96 overflow-y-auto p-1">
-            {notifications.items.map((notification) => {
-              const accessRequest = notification.type === 'ACCESS_REQUESTED';
-              const missingProject = notification.type === 'USER_LOGIN_WITHOUT_PROJECT';
-              const requestedProjectName = payloadText(notification, 'requestedProjectName');
-              const title = accessRequest
-                ? t('notifications.accessRequestedTitle')
-                : missingProject ? t('notifications.missingProjectTitle') : t('notifications.newActivity');
-              const description = accessRequest
-                ? t(!notification.tenantId ? 'notifications.globalAccessRequestedDescription' : requestedProjectName ? 'notifications.accessRequestedForProjectDescription' : 'notifications.accessRequestedDescription', {
-                    userName: payloadText(notification, 'userName'),
-                    userEmail: payloadText(notification, 'userEmail'),
-                    tenantName: payloadText(notification, 'tenantName'),
-                    projectName: requestedProjectName,
-                  })
-                : missingProject
-                  ? t('notifications.missingProjectDescription', {
-                      userName: payloadText(notification, 'userName'),
-                      userEmail: payloadText(notification, 'userEmail'),
-                      tenantName: payloadText(notification, 'tenantName'),
-                    })
-                : t('notifications.newActivityDescription');
-              return (
+            {notifications.items.map((notification) => (
                 <DropdownMenuItem
                   key={notification.id}
-                  className={cn('items-start gap-3 px-3 py-3', !notification.readAt && 'bg-primary/5')}
+                  className="items-start gap-3 px-3 py-3 data-[highlighted]:bg-muted"
                   onSelect={() => void openNotification(notification)}
                 >
-                  <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-primary/10 text-primary">
-                    {accessRequest ? <UserRoundPlus className="size-4" aria-hidden="true" /> : missingProject ? <FolderClock className="size-4" aria-hidden="true" /> : <Bell className="size-4" aria-hidden="true" />}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-start justify-between gap-2">
-                      <span className="font-medium text-foreground">{title}</span>
-                      {!notification.readAt ? <span className="mt-1.5 size-2 shrink-0 rounded-full bg-primary" aria-label={t('notifications.unread')} /> : null}
-                    </span>
-                    <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">{description}</span>
-                    <span className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
-                      <time dateTime={notification.createdAt}>{formatDate(notification.createdAt, i18n.language)}</time>
-                      {notification.resolvedAt ? <span>· {t('notifications.resolved')}</span> : null}
-                    </span>
-                  </span>
+                  <NotificationContent notification={notification} />
                 </DropdownMenuItem>
-              );
-            })}
+              ))}
           </div>
         )}
+        <DropdownMenuSeparator className="m-0" />
+        <DropdownMenuItem asChild className="m-1 justify-center font-medium">
+          <Link to="/notifications"><Bell aria-hidden="true" />{t('notifications.viewAll')}</Link>
+        </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

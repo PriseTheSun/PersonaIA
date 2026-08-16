@@ -20,6 +20,19 @@ Centralizar a criação e a organização de personas para pesquisas em um SaaS 
 - Busca, filtros por organização/evento/recurso/período e paginação são processados
   no servidor. Abrir ou filtrar a auditoria também gera um evento auditável.
 
+## Central de notificações
+
+- Toda conta autenticada pode abrir `/notifications` pelo rodapé do sino para
+  consultar as notificações destinadas à própria identidade.
+- A central oferece filtros por todas, não lidas e lidas, paginação no servidor,
+  leitura individual e a ação de marcar todas como lidas.
+- A listagem e o total do sino sempre respeitam a autoridade atual do usuário.
+  Perder um vínculo administrativo remove imediatamente do feed as notificações
+  daquele escopo, inclusive quando a sessão ainda possui um token anterior.
+- Notificações que representam uma ação conhecida direcionam ao contexto correto
+  do controle de acessos; atividades sem destino permanecem consultáveis no
+  histórico sem criar um link enganoso.
+
 ## Brand Personality
 
 Clean, elegante e minimalista. A voz é clara, serena e precisa: transmite confiança sem parecer burocrática e facilita decisões sem chamar atenção para a própria interface.

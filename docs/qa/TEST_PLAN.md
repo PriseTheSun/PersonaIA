@@ -68,6 +68,19 @@ da ordem de execução.
 | AUTH-022 | projeto vinculado após alerta sem projeto | alerta é resolvido e o acesso passa a valer sem escalada de permissão |
 | AUTH-023 | Super Admin aprova cadastro sem código e escolhe organização | cria vínculo `CLIENT_MEMBER` ativo na organização escolhida, sem inferência por e-mail |
 
+## 2.1 Central de notificações
+
+| ID | Cenário | Resultado esperado |
+|---|---|---|
+| NOT-001 | usuário autenticado abre `/notifications` | recebe apenas notificações destinadas à própria identidade e autorizadas pela autoridade atual |
+| NOT-002 | filtrar por todas/não lidas/lidas | filtro é aplicado no servidor e os totais/páginas não vazam registros de outro destinatário |
+| NOT-003 | navegar entre páginas | `page` e `pageSize` são limitados, estáveis e preservados na URL da interface |
+| NOT-004 | enviar `recipientId`, `tenantId` ou campo desconhecido na query | 400; o cliente não controla o escopo da consulta |
+| NOT-005 | abrir notificação não lida | somente a notificação autorizada é marcada; ID alheio ou inexistente retorna 404 seguro |
+| NOT-006 | marcar todas como lidas | atualiza apenas notificações autorizadas do destinatário atual |
+| NOT-007 | perder vínculo administrativo com token ainda vigente | feed, contador e mutações deixam de incluir imediatamente o escopo revogado |
+| NOT-008 | interface em 320×480 e teclado | filtros, lista, paginação e ações permanecem acessíveis, sem overflow ou erro de console |
+
 ## 3. Matriz de isolamento e IDOR/BOLA
 
 Executar para `GET`, list/search, `POST`, `PATCH/PUT`, `DELETE`, batch, export e ações

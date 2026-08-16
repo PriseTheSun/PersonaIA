@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { ClientRole, MembershipStatus, Prisma, RecordStatus, Role } from '@prisma/client';
 import { Principal } from '../common/types/principal';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsQuery } from './notifications.schemas';
 
 export const ACCESS_REQUESTED_NOTIFICATION = 'ACCESS_REQUESTED';
 export const USER_LOGIN_WITHOUT_PROJECT_NOTIFICATION = 'USER_LOGIN_WITHOUT_PROJECT';
@@ -108,11 +109,15 @@ export class NotificationsService {
     });
   }
 
-  async list(actor: Principal) {
+  async list(actor: Principal, query: NotificationsQuery = { page: 1, pageSize: 25, status: 'ALL' }) {
     const authorized = await this.authorizedWhere(actor);
-    const [items, unreadCount] = await Promise.all([
+    const filtered: Prisma.NotificationWhereInput = {
+      ...authorized,
+      ...(query.status === 'UNREAD' ? { readAt: null } : query.status === 'READ' ? { readAt: { not: null } } : {}),
+    };
+    const [items, total, unreadCount] = await Promise.all([
       this.prisma.notification.findMany({
-        where: authorized,
+        where: filtered,
         select: {
           id: true,
           tenantId: true,
@@ -124,11 +129,22 @@ export class NotificationsService {
           createdAt: true,
         },
         orderBy: { createdAt: 'desc' },
-        take: 30,
+        skip: (query.page - 1) * query.pageSize,
+        take: query.pageSize,
       }),
+      this.prisma.notification.count({ where: filtered }),
       this.prisma.notification.count({ where: { ...authorized, readAt: null } }),
     ]);
-    return { items, unreadCount };
+    return {
+      items,
+      unreadCount,
+      pagination: {
+        page: query.page,
+        pageSize: query.pageSize,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / query.pageSize)),
+      },
+    };
   }
 
   async markRead(id: string, actor: Principal) {

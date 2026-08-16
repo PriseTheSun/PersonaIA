@@ -337,6 +337,15 @@ export const notificationsResponseSchema = z.object({
   unreadCount: z.number().int().nonnegative(),
 });
 
+export const notificationsPageResponseSchema = notificationsResponseSchema.extend({
+  pagination: z.object({
+    page: z.number().int().min(1),
+    pageSize: z.number().int().min(10).max(100),
+    total: z.number().int().nonnegative(),
+    totalPages: z.number().int().min(1),
+  }),
+});
+
 export const auditLogSchema = z.object({
   id: z.string().uuid(),
   action: z.string().min(1),

@@ -92,11 +92,20 @@ describe('NotificationsService', () => {
       email: 'admin@test.dev', name: 'Admin', role: 'SUPER_ADMIN' as const, tokenVersion: 0
     };
 
-    await expect(service.list(actor)).resolves.toEqual({ items: [], unreadCount: 0 });
+    await expect(service.list(actor, { page: 2, pageSize: 10, status: 'UNREAD' })).resolves.toEqual({
+      items: [],
+      unreadCount: 0,
+      pagination: { page: 2, pageSize: 10, total: 0, totalPages: 1 },
+    });
     expect(prisma.notification.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { recipientId: actor.id }
+      where: { recipientId: actor.id, readAt: null },
+      skip: 10,
+      take: 10,
     }));
-    expect(prisma.notification.count).toHaveBeenCalledWith({
+    expect(prisma.notification.count).toHaveBeenNthCalledWith(1, {
+      where: { recipientId: actor.id, readAt: null },
+    });
+    expect(prisma.notification.count).toHaveBeenNthCalledWith(2, {
       where: { recipientId: actor.id, readAt: null }
     });
   });

@@ -101,6 +101,7 @@ describe('AppShell', () => {
 
     expect(await screen.findByRole('status')).toHaveTextContent('Tudo em dia');
     expect(screen.getByRole('status')).toHaveTextContent('Novas atividades importantes aparecerão aqui.');
+    expect(screen.getByRole('menuitem', { name: 'Ver todas as notificações' }).closest('a')).toHaveAttribute('href', '/notifications');
   });
 
   it('shows a persistent unread access request for the responsible client', async () => {

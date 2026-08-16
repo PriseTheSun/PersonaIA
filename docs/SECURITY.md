@@ -110,6 +110,10 @@ IDs UUID/ULID reduzem enumeração, mas não são um controle de autorização.
   e nunca substitui a aprovação administrativa. Login sem projeto gera uma
   notificação por destinatário/organização enquanto o alerta estiver aberto;
   um índice parcial impede duplicação em logins concorrentes.
+- A central de notificações filtra exclusivamente pelo destinatário autenticado e
+  revalida, em cada leitura ou mutação, os vínculos administrativos ativos dos
+  escopos exibidos. Filtros e paginação usam allowlist com limites no servidor;
+  IDs de destinatário ou organização enviados na query são rejeitados.
 - Sem código, o autocadastro não tenta inferir uma organização por domínio de
   e-mail e não cria vínculo implícito. Apenas Super Admins recebem a solicitação
   global e devem escolher explicitamente a organização antes da ativação.
