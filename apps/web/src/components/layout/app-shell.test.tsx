@@ -7,12 +7,22 @@ import { AuthContext } from '@/features/auth/auth-store';
 import { AppShell } from './app-shell';
 
 function renderShell(role: 'SUPER_ADMIN' | 'CLIENT_ADMIN' = 'SUPER_ADMIN') {
+  const activeContext = role === 'CLIENT_ADMIN' ? {
+    tenantId: 'tenant-1',
+    tenantName: 'Organização Teste',
+    clientRole: 'CLIENT_ADMIN' as const,
+    status: 'ACTIVE' as const,
+    hasProjectAccess: true,
+    workspaces: [],
+  } : undefined;
   return render(
     <I18nProvider>
       <MemoryRouter>
         <AuthContext.Provider value={{
           status: 'authenticated',
-          user: { id: 'user-1', name: 'Admin PersonaIA', email: 'admin@personaia.test', role, status: 'ACTIVE' },
+          user: { id: 'user-1', name: 'Admin PersonaIA', email: 'admin@personaia.test', role, status: 'ACTIVE', ...(activeContext ? { contexts: [activeContext] } : {}) },
+          activeContext,
+          effectiveRole: role,
           login: vi.fn(),
           logout: vi.fn(),
           refresh: vi.fn(),
@@ -65,13 +75,23 @@ describe('AppShell', () => {
     );
   });
 
-  it('shows the user classification as badges without the global platform label', () => {
+  it('keeps the user classification in the account menu without the global platform label', () => {
     renderShell();
 
     expect(screen.queryByText('Visão global da plataforma')).not.toBeInTheDocument();
     const classifications = screen.getAllByText('Superadministrador');
-    expect(classifications).toHaveLength(2);
+    expect(classifications).toHaveLength(1);
     expect(classifications.every((classification) => classification.closest('[data-slot="badge"]'))).toBe(true);
+  });
+
+  it('shows the active organization beside the sidebar trigger', () => {
+    renderShell('CLIENT_ADMIN');
+
+    const organizations = screen.getAllByText('Organização Teste');
+    expect(organizations).toHaveLength(1);
+    expect(organizations[0].closest('header')).not.toBeNull();
+    expect(organizations[0].closest('[data-slot="badge"]')).not.toBeNull();
+    expect(screen.getAllByText('Administrador da organização')).toHaveLength(1);
   });
 
   it('keeps sidebar icons and labels on one line', () => {
