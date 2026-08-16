@@ -13,11 +13,17 @@ const validProductionEnvironment = {
 
 describe('production environment security', () => {
   it('accepts distinct high-entropy secrets', () => {
-    expect(validateEnvironment(validProductionEnvironment)).toMatchObject({ NODE_ENV: 'production', COOKIE_SECURE: 'true', SESSION_TTL_MINUTES: 120 });
+    expect(validateEnvironment(validProductionEnvironment)).toMatchObject({
+      NODE_ENV: 'production', COOKIE_SECURE: 'true', SESSION_TTL_MINUTES: 120, INVITATION_TTL_HOURS: 168,
+    });
   });
 
   it('accepts an explicit 120-minute session lifetime', () => {
     expect(validateEnvironment({ ...validProductionEnvironment, SESSION_TTL_MINUTES: '120' }).SESSION_TTL_MINUTES).toBe(120);
+  });
+
+  it('limits invitation lifetime to 30 days', () => {
+    expect(() => validateEnvironment({ ...validProductionEnvironment, INVITATION_TTL_HOURS: '721' })).toThrow(/INVITATION_TTL_HOURS/);
   });
 
   it('rejects known placeholder text even when it satisfies minimum length', () => {

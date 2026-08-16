@@ -19,6 +19,7 @@ import { UsersModule } from './users/users.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
 import { AssetsModule } from './assets/assets.module';
 import { PreferencesModule } from './preferences/preferences.module';
+import { InvitationsModule } from './invitations/invitations.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { PreferencesModule } from './preferences/preferences.module';
     WorkspacesModule,
     AssetsModule,
     PreferencesModule,
+    InvitationsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: OriginGuard },

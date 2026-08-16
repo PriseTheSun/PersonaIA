@@ -55,6 +55,20 @@ INSERT INTO "User" ("id", "tenantId", "email", "name", "passwordHash", "role", "
   ('10000000-0000-4000-8000-00000000001a', '10000000-0000-4000-8000-00000000000a', 'qa-invariants-a@example.test', 'QA A', 'not-a-real-login-hash', 'PROJECT_USER', 'ACTIVE', CURRENT_TIMESTAMP),
   ('10000000-0000-4000-8000-00000000001b', '10000000-0000-4000-8000-00000000000b', 'qa-invariants-b@example.test', 'QA B', 'not-a-real-login-hash', 'PROJECT_USER', 'ACTIVE', CURRENT_TIMESTAMP);
 
+-- RN-06: cadastro sem código cria uma identidade global pendente até que o
+-- Super Admin defina sua primeira organização.
+INSERT INTO "User" ("id", "tenantId", "email", "name", "passwordHash", "role", "status", "updatedAt") VALUES
+  ('10000000-0000-4000-8000-00000000001c', NULL, 'qa-global-pending@example.test', 'QA Global Pending', 'not-a-real-login-hash', 'PROJECT_USER', 'PENDING_APPROVAL', CURRENT_TIMESTAMP);
+
+-- A abertura para identidades pendentes não permite SUPER_ADMIN vinculado a
+-- tenant no campo legado.
+SELECT pg_temp.expect_sqlstate(
+  $sql$INSERT INTO "User" ("tenantId", "email", "name", "passwordHash", "role", "status", "updatedAt")
+       VALUES ('10000000-0000-4000-8000-00000000000a', 'qa-invalid-super@example.test',
+               'QA Invalid Super', 'not-a-real-login-hash', 'SUPER_ADMIN', 'ACTIVE', CURRENT_TIMESTAMP)$sql$,
+  '23514'
+);
+
 INSERT INTO "ClientMembership" ("id", "tenantId", "userId", "role", "status", "updatedAt") VALUES
   ('10000000-0000-4000-8000-00000000002a', '10000000-0000-4000-8000-00000000000a', '10000000-0000-4000-8000-00000000001a', 'CLIENT_ADMIN', 'ACTIVE', CURRENT_TIMESTAMP),
   ('10000000-0000-4000-8000-00000000002b', '10000000-0000-4000-8000-00000000000b', '10000000-0000-4000-8000-00000000001b', 'CLIENT_ADMIN', 'ACTIVE', CURRENT_TIMESTAMP);

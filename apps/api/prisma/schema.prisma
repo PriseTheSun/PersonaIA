@@ -84,6 +84,14 @@ enum AssociationAction {
   DISASSOCIATED
 }
 
+enum InvitationStatus {
+  PENDING_DELIVERY
+  SENT
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
 model Tenant {
   id                        String                        @id @default(uuid()) @db.Uuid
   name                      String                        @db.VarChar(120)
@@ -106,6 +114,7 @@ model Tenant {
   projectQuestionnaireUsage ProjectQuestionnaireUsage[]
   auditLogs                 AuditLog[]
   notifications             Notification[]
+  invitations               Invitation[]
   createdAt                 DateTime                      @default(now())
   updatedAt                 DateTime                      @updatedAt
 
@@ -135,6 +144,7 @@ model User {
   auditLogs            AuditLog[]                    @relation("AuditActor")
   associationHistory   AssetAssociationHistory[]     @relation("AssociationActor")
   notifications        Notification[]                @relation("NotificationRecipient")
+  sentInvitations      Invitation[]                  @relation("InvitationSender")
   createdAt            DateTime                      @default(now())
   updatedAt            DateTime                      @updatedAt
 
@@ -245,6 +255,7 @@ model Project {
   permissions        ProjectFunctionalPermission[]
   personaUsage       ProjectPersonaUsage[]
   questionnaireUsage ProjectQuestionnaireUsage[]
+  invitations        Invitation[]
   createdAt          DateTime                      @default(now())
   updatedAt          DateTime                      @updatedAt
 
@@ -489,4 +500,28 @@ model Notification {
   @@index([recipientId, tenantId, type, targetId])
   @@index([recipientId, readAt, createdAt])
   @@index([tenantId, type, createdAt])
+}
+
+model Invitation {
+  id          String           @id @default(uuid()) @db.Uuid
+  tenantId    String           @db.Uuid
+  email       String           @db.VarChar(254)
+  role        ClientRole       @default(CLIENT_MEMBER)
+  projectId   String?          @db.Uuid
+  invitedById String?          @db.Uuid
+  tokenHash   String           @unique @db.Char(64)
+  status      InvitationStatus @default(PENDING_DELIVERY)
+  expiresAt   DateTime
+  sentAt      DateTime?
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  tenant      Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  project     Project?         @relation(fields: [projectId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  invitedBy   User?            @relation("InvitationSender", fields: [invitedById], references: [id], onDelete: SetNull)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, email, status])
+  @@index([projectId, status])
 }

@@ -47,11 +47,11 @@ describe('AppShell', () => {
     }));
   });
 
-  it('places the account avatar in the sidebar and keeps settings in the header', () => {
+  it('places the account avatar in the sidebar and keeps only global actions in the header', () => {
     renderShell();
 
     expect(screen.getByRole('button', { name: 'Conta' }).closest('[data-sidebar="sidebar"]')).not.toBeNull();
-    expect(screen.getByRole('button', { name: 'Idioma' }).closest('header')).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Idioma' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Tema' }).closest('header')).not.toBeNull();
   });
 

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { PageHeader } from '@/components/shared/page-header';
 import { useAuth } from '@/features/auth/auth-store';
 import { AvatarPreference } from './avatar-preference';
+import { LanguagePreference } from './language-preference';
 import { PasswordPreference } from './password-preference';
 import { useCurrentAvatar } from './use-current-avatar';
 
@@ -19,6 +20,7 @@ export function PreferencesPage() {
     <div className="space-y-6">
       <PageHeader title={t('preferences.title')} description={t('preferences.description')} />
       <div className="flex w-full flex-col gap-5">
+        <LanguagePreference />
         <AvatarPreference
           name={user.name}
           email={user.email}

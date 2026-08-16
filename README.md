@@ -23,6 +23,12 @@ Cada projeto possui um código de cadastro de 12 caracteres que é renovado auto
 
 Personas e questionários existem uma vez na organização e são associados a vários workspaces por referência. Projetos que utilizam esses ativos preservam um snapshot histórico independente.
 
+## Convites por e-mail
+
+A API já reserva convites de organização por `POST /api/v1/tenants/:tenantId/invitations`, com o corpo `{ "email", "role", "projectId?" }`. A rota exige Super Admin ou administrador ativo da organização, aplica rate limit, valida o projeto dentro do mesmo tenant, registra auditoria e armazena apenas o hash do token com validade padrão de sete dias.
+
+Enquanto não houver um provedor de e-mail configurado, o convite é persistido como `PENDING_DELIVERY` e nenhum e-mail é simulado ou exposto em logs/respostas. A integração futura deve substituir o provider `INVITATION_EMAIL_DELIVERY`; quando ele confirmar o envio, o mesmo contrato passa a responder o convite como `SENT`.
+
 ## Executar com Docker
 
 Pré-requisitos: Docker com Compose v2+.

@@ -116,7 +116,7 @@ const passwordHash = await argon2.hash(PASSWORD, {
 
 try {
   await prisma.$executeRawUnsafe(`TRUNCATE TABLE
-    "Notification", "AuditLog", "RefreshSession", "ProjectPersonaUsage",
+    "Invitation", "Notification", "AuditLog", "RefreshSession", "ProjectPersonaUsage",
     "ProjectQuestionnaireUsage", "AssetAssociationHistory", "WorkspacePersona",
     "WorkspaceQuestionnaire", "ProjectFunctionalPermission", "WorkspacePermission",
     "ProjectMembership", "WorkspaceMembership", "ClientMembership", "Persona",

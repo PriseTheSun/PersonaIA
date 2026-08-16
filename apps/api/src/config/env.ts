@@ -16,7 +16,8 @@ const environmentSchema = z.object({
   COOKIE_SECURE: z.enum(['true', 'false']).default('false'),
   TRUST_PROXY: z.enum(['true', 'false']).default('false'),
   RATE_LIMIT_TTL_MS: z.coerce.number().int().min(1000).default(60_000),
-  RATE_LIMIT_MAX: z.coerce.number().int().min(1).max(10_000).default(100)
+  RATE_LIMIT_MAX: z.coerce.number().int().min(1).max(10_000).default(100),
+  INVITATION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(168)
 });
 
 export type Environment = z.infer<typeof environmentSchema>;

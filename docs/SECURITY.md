@@ -103,6 +103,9 @@ IDs UUID/ULID reduzem enumeração, mas não são um controle de autorização.
   o valor não é persistido em texto puro. A validação pesquisa somente projetos
   de organizações ativas, usa comparação de tempo constante e permanece
   protegida pelo rate limit da rota pública.
+- Convites por e-mail são tenant-scoped, possuem expiração, rate limit e token
+  aleatório armazenado somente como SHA-256. O token bruto é entregue apenas ao
+  adaptador de e-mail em memória e nunca integra resposta, auditoria ou log.
 - Um código válido registra apenas o projeto solicitado. O vínculo fica pendente
   e nunca substitui a aprovação administrativa. Login sem projeto gera uma
   notificação por destinatário/organização enquanto o alerta estiver aberto;

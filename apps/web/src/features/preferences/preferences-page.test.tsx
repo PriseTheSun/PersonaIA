@@ -59,16 +59,18 @@ describe('PreferencesPage', () => {
     logout.mockReset();
   });
 
-  it('shows profile photo and password controls for the current user', () => {
+  it('shows language, profile photo, and password controls for the current user', () => {
     renderPage();
     expect(screen.getByRole('heading', { level: 1, name: 'Preferências' })).toBeVisible();
     const sections = screen.getAllByRole('heading', { level: 2 });
-    expect(sections.map((heading) => heading.textContent)).toEqual(['Foto de perfil', 'Alterar senha']);
+    expect(sections.map((heading) => heading.textContent)).toEqual(['Idioma do sistema', 'Foto de perfil', 'Alterar senha']);
     const preferencesContainer = sections[0].closest('section')?.parentElement;
     expect(preferencesContainer).toHaveClass('flex', 'w-full', 'flex-col');
     expect(preferencesContainer).not.toHaveClass('max-w-3xl');
     expect(sections[0].closest('section')).toHaveClass('w-full');
     expect(sections[1].closest('section')).toHaveClass('w-full');
+    expect(sections[2].closest('section')).toHaveClass('w-full');
+    expect(screen.getByRole('button', { name: 'Idioma' })).toHaveTextContent('Português (BR)');
     expect(screen.getByLabelText('Escolher foto')).toHaveAttribute('accept', 'image/png,image/jpeg');
   });
 

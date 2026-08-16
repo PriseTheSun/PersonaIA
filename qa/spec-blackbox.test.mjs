@@ -186,6 +186,31 @@ test('CY-09: PENDING_APPROVAL não cria sessão', async (t) => {
   assert.equal(response.json?.accessToken, undefined);
 });
 
+test('RN-06: cadastro sem código cria identidade global pendente', async (t) => {
+  if (!requireMutation(t) || !requireConfig(t, 'baseUrl', 'credentials.superAdmin')) return;
+  const marker = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const account = {
+    name: 'QA Cadastro Global',
+    email: `qa-global-registration-${marker}@example.test`,
+    password: 'QA-Global-Registration-2026!',
+  };
+
+  const registration = await request('POST', '/auth/register', { body: account });
+  assert.ok(
+    [200, 201, 202].includes(registration.status),
+    `cadastro global sem código falhou (${registration.status}): ${registration.text}`
+  );
+
+  const superSession = await login('superAdmin');
+  const identities = await request('GET', '/user-access', { session: superSession });
+  assert.equal(identities.status, 200, `controle global indisponível (${identities.status})`);
+  const identity = records(identities).find((item) => item.email === account.email);
+  assert.ok(identity, 'identidade global sem código não apareceu no controle de acessos');
+  assert.equal(identity.status, 'PENDING_APPROVAL');
+  assert.equal(identity.tenantId, null);
+  assert.equal(identity.role, 'PROJECT_USER');
+});
+
 test('RN-03/CY-02: CLIENT_ADMIN A não lê workspace B por IDs no path', async (t) => {
   if (!requireConfig(t, 'baseUrl', 'credentials.clientAdminA', 'ids.tenantB', 'ids.workspaceB1')) return;
   const session = await login('clientAdminA');

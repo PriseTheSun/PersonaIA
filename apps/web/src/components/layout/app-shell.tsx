@@ -2,7 +2,6 @@ import { useTranslation } from 'react-i18next';
 import { FolderClock } from 'lucide-react';
 import { Outlet } from 'react-router-dom';
 import { AppLogo } from '@/components/shared/app-logo';
-import { LanguageSelector } from '@/components/shared/language-selector';
 import { ThemeSelector } from '@/components/shared/theme-selector';
 import { Badge } from '@/components/ui/badge';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarInset, SidebarProvider, SidebarRail, SidebarTrigger } from '@/components/ui/sidebar';
@@ -39,7 +38,7 @@ export function AppShell() {
               {t(`roles.${auth.effectiveRole ?? auth.user.role}`)}
             </Badge>
           </div>
-          <div className="ml-auto flex items-center gap-0.5"><LanguageSelector /><ThemeSelector /><NotificationsMenu /></div>
+          <div className="ml-auto flex items-center gap-0.5"><ThemeSelector /><NotificationsMenu /></div>
         </header>
         <main id="main-content" className="mx-auto w-full max-w-[1440px] px-3 py-5 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
           {waitingForProject ? (
