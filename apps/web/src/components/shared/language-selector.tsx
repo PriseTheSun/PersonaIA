@@ -1,8 +1,9 @@
 import { Languages } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { toast } from 'sonner';
 import { Button, type ButtonProps } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { supportedLocales } from '@/i18n/resources';
+import { supportedLocales, type AppLocale } from '@/i18n/resources';
 
 const labels = { 'pt-BR': 'Português (BR)', es: 'Español', en: 'English' };
 
@@ -14,6 +15,16 @@ export function LanguageSelector({
   variant?: ButtonProps['variant'];
 }) {
   const { t, i18n } = useTranslation();
+  const changeLanguage = async (locale: string) => {
+    if (!supportedLocales.includes(locale as AppLocale) || locale === i18n.language) return;
+    try {
+      await i18n.changeLanguage(locale);
+      toast.success(i18n.t('preferences.languageUpdated', { language: labels[locale as AppLocale] }));
+    } catch {
+      toast.error(t('preferences.languageUpdateError'));
+    }
+  };
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -23,7 +34,7 @@ export function LanguageSelector({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuLabel>{t('common.language')}</DropdownMenuLabel>
-        <DropdownMenuRadioGroup value={i18n.language} onValueChange={(locale) => void i18n.changeLanguage(locale)}>
+        <DropdownMenuRadioGroup value={i18n.language} onValueChange={(locale) => void changeLanguage(locale)}>
           {supportedLocales.map((locale) => <DropdownMenuRadioItem key={locale} value={locale} lang={locale}>{labels[locale]}</DropdownMenuRadioItem>)}
         </DropdownMenuRadioGroup>
       </DropdownMenuContent>
