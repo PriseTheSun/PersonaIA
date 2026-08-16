@@ -39,13 +39,11 @@ Escopo: `/register`, app shell e código das rotas `/workspaces`, `/projects`,
   definidas no mesmo fluxo.
 - Resultado: UC-03 passa a ser concluível sem conhecer identificadores internos.
 
-### [P2] Exclusão do workspace padrão é oferecida embora sempre falhe
+### [Resolvido] Workspace é uma pasta opcional
 
 - Local: `features/workspaces/workspaces-page.tsx`.
-- Impacto: o usuário abre confirmação e recebe conflito previsível do backend.
-- Recomendação: desabilitar/ocultar `Excluir` quando `isDefault`, com explicação
-  textual acessível no menu.
-- Comando sugerido: `$impeccable clarify`.
+- Resultado: qualquer workspace pode ser excluído; seus projetos são apenas
+  desagrupados e continuam disponíveis diretamente na organização.
 
 ### [P2] Associação múltipla pode terminar parcialmente aplicada
 

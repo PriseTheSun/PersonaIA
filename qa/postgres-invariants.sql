@@ -27,17 +27,6 @@ BEGIN
     RAISE EXCEPTION 'migration deixou cliente ativo sem CLIENT_ADMIN ativo';
   END IF;
 
-  IF EXISTS (
-    SELECT 1
-    FROM "Tenant" t
-    WHERE t."status" = 'ACTIVE'
-      AND NOT EXISTS (
-        SELECT 1 FROM "Workspace" w
-        WHERE w."tenantId" = t."id" AND w."isDefault" = true
-      )
-  ) THEN
-    RAISE EXCEPTION 'migration deixou cliente ativo sem workspace padrão';
-  END IF;
 END;
 $$;
 

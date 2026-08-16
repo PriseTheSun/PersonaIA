@@ -64,16 +64,15 @@ export class TenantsService {
             description: input.description?.trim(),
           },
         });
-        const workspaceName = input.workspace?.name ?? 'Workspace principal';
-        const workspace = await tx.workspace.create({
+        const workspace = input.workspace ? await tx.workspace.create({
           data: {
             tenantId: tenant.id,
-            name: workspaceName.trim(),
-            slug: normalizeSlug(workspaceName),
-            description: input.workspace?.description?.trim(),
+            name: input.workspace.name.trim(),
+            slug: normalizeSlug(input.workspace.name),
+            description: input.workspace.description?.trim(),
             isDefault: true,
           },
-        });
+        }) : null;
         const currentIdentity = existingIdentity ? await tx.user.findUnique({ where: { id: existingIdentity.id } }) : null;
         if (currentIdentity && !new Set<RecordStatus>([RecordStatus.ACTIVE, RecordStatus.PENDING, RecordStatus.PENDING_APPROVAL, RecordStatus.INVITED]).has(currentIdentity.status)) {
           throw new ConflictException('A identidade selecionada está inativa e exige reativação explícita.');
@@ -94,17 +93,20 @@ export class TenantsService {
         const membership = await tx.clientMembership.create({
           data: { tenantId: tenant.id, userId: admin.id, role: ClientRole.CLIENT_ADMIN, status: MembershipStatus.ACTIVE },
         });
-        await tx.workspaceMembership.create({
-          data: {
-            tenantId: tenant.id, workspaceId: workspace.id, userId: admin.id,
-            role: WorkspaceRole.WORKSPACE_ADMIN, status: MembershipStatus.ACTIVE,
-            inheritedFromClientAdmin: true,
-          },
-        });
+        if (workspace) {
+          await tx.workspaceMembership.create({
+            data: {
+              tenantId: tenant.id, workspaceId: workspace.id, userId: admin.id,
+              role: WorkspaceRole.WORKSPACE_ADMIN, status: MembershipStatus.ACTIVE,
+              inheritedFromClientAdmin: true,
+            },
+          });
+        }
         await tx.auditLog.create({
           data: {
             actorId: actor.id, tenantId: tenant.id, action: 'TENANT_CREATED', targetType: 'Tenant', targetId: tenant.id,
-            scopeType: 'TENANT', scopeId: tenant.id, metadata: { workspaceId: workspace.id, clientMembershipId: membership.id },
+            scopeType: 'TENANT', scopeId: tenant.id,
+            metadata: { ...(workspace ? { workspaceId: workspace.id } : {}), clientMembershipId: membership.id },
           },
         });
         return { tenant, workspace, admin: redactUser(admin) };

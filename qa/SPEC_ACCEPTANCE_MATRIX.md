@@ -26,7 +26,7 @@ interface. Teste unitário com mock não comprova isolamento, transação ou con
 
 | ID | Cenário executável | Evidência obrigatória | Regras | Prioridade |
 |---|---|---|---|---|
-| CA-01 | SUPER_ADMIN cria A informando CLIENT_ADMIN | A, workspace padrão e membership `CLIENT_ADMIN/ACTIVE` nascem na mesma transação; o admin é `WORKSPACE_ADMIN` efetivo no workspace inicial; falha intermediária não deixa órfãos | RN-01, RN-02, RN-13, RN-14 | P1 |
+| CA-01 | SUPER_ADMIN cria A informando CLIENT_ADMIN, sem workspace | A e membership `CLIENT_ADMIN/ACTIVE` nascem na mesma transação; nenhum workspace é criado implicitamente; uma pasta opcional pode ser criada depois sem deixar órfãos em caso de falha | RN-01, RN-02, RN-13, RN-14 | P1 |
 | CA-02 | CLIENT_ADMIN de A cria WA2 e delega WORKSPACE_ADMIN | novo workspace pertence somente a A; UA precisa estar vinculado a A; auditoria registra ator/ação/escopo/tempo | RN-02, RN-03, RN-10, RN-14 | P1 |
 | CA-03 | UA recebe defaults por feature em WA1 | os defaults se aplicam a PA1 e a todo projeto criado depois no mesmo workspace; não alcançam WA2/PB1 | RN-03, RN-04, RN-05 | P1 |
 | CA-04 | PA1 recebe override para UA | override substitui o nível do workspace apenas em PA1; outro projeto continua herdando; `DENY` vence inclusive `ADMIN` herdado | RN-04, RN-05, RN-12 | P1 |
