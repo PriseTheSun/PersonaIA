@@ -273,7 +273,7 @@ export class ProjectsService {
       this.accessControl().requireProject(actor, input.toProjectId, true),
     ]);
     if (sourceProject.tenantId !== destinationProject.tenantId && !this.accessControl().isSuper(actor)) {
-      throw new BadRequestException('Movimentação de membro entre clientes não é permitida.');
+      throw new BadRequestException('Não é permitido mover membros entre organizações.');
     }
     await this.requireWorkspaceUser(input.userId, destinationProject.tenantId, destinationProject.workspaceId);
     const source = await this.prisma.projectMembership.findFirst({

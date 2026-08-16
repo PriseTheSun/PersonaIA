@@ -168,7 +168,7 @@ O sistema é plano por padrão. Profundidade vem de camadas tonais e divisores; 
 
 ### Navigation
 
-Sidebar branca no tema claro e Azul Escuro no tema escuro; navegação compacta e acionável por drawer em larguras pequenas. O estado ativo combina Azul de Seleção, peso e foco elétrico. O contexto atual de tenant e projeto permanece identificável.
+Sidebar branca no tema claro e Azul Escuro no tema escuro; navegação compacta e acionável por drawer em larguras pequenas. O estado ativo combina Azul de Seleção, peso e foco elétrico. O contexto atual de organização e projeto permanece identificável.
 
 ### Authentication Carousel
 

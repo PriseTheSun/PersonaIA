@@ -91,3 +91,26 @@ test('i18n: vocabulário multicliente crítico está traduzido', () => {
     }
   }
 });
+
+test('i18n: organização é a nomenclatura de produto em todos os idiomas', () => {
+  const expected = {
+    'pt-BR': { singular: 'Organização', plural: 'Organizações', administrator: 'Administrador da organização' },
+    es: { singular: 'Organización', plural: 'Organizaciones', administrator: 'Administrador de la organización' },
+    en: { singular: 'Organization', plural: 'Organizations', administrator: 'Organization administrator' }
+  };
+  const deprecatedTerms = {
+    'pt-BR': /\bclientes?\b/i,
+    es: /\bclientes?\b/i,
+    en: /\bclients?\b/i
+  };
+
+  for (const locale of locales) {
+    assert.equal(translations[locale].get('common.tenant'), expected[locale].singular);
+    assert.equal(translations[locale].get('nav.tenants'), expected[locale].plural);
+    assert.equal(translations[locale].get('roles.CLIENT_ADMIN'), expected[locale].administrator);
+
+    for (const [key, value] of translations[locale]) {
+      assert.doesNotMatch(value, deprecatedTerms[locale], `${locale}:${key} ainda usa a nomenclatura anterior`);
+    }
+  }
+});

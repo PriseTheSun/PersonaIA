@@ -6,11 +6,11 @@ product
 
 ## Users
 
-O sistema atende equipes que criam e administram personas genéricas para responder pesquisas. O Super Admin opera a plataforma, cria tenants e seus Client Admins. Cada Client Admin pertence a exatamente um tenant, administra vários projetos e gerencia usuários e permissões específicas por projeto, sem qualquer acesso cruzado entre tenants.
+O sistema atende equipes que criam e administram personas genéricas para responder pesquisas. O Super Admin opera a plataforma, cria organizações (tenants) e seus Administradores da Organização (`CLIENT_ADMIN`). Cada Administrador da Organização pode atuar apenas nas organizações às quais possui vínculo, administra vários projetos e gerencia usuários e permissões específicas por projeto, sem qualquer acesso cruzado entre organizações.
 
 ## Product Purpose
 
-Centralizar a criação e a organização de personas para pesquisas em um SaaS multi-tenant seguro. O produto deve permitir que tarefas administrativas recorrentes — criar um cliente, organizar projetos, mover usuários e ajustar permissões — sejam concluídas em poucos cliques, com isolamento de dados verificável e uma base preparada para a futura definição da matriz completa de acessos.
+Centralizar a criação e a organização de personas para pesquisas em um SaaS multi-tenant seguro. O produto deve permitir que tarefas administrativas recorrentes — criar uma organização, organizar projetos, mover usuários e ajustar permissões — sejam concluídas em poucos cliques, com isolamento de dados verificável e uma base preparada para a futura definição da matriz completa de acessos.
 
 ## Brand Personality
 

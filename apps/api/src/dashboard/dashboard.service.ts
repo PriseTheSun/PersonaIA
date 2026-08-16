@@ -51,7 +51,7 @@ export class DashboardService {
     const range = query.range;
     const empty = buildSeries(range, now, [], []);
     if (!this.access.isSuper(actor) && !query.tenantId) {
-      throw new ForbiddenException('Informe o contexto de cliente.');
+      throw new ForbiddenException('Informe o contexto da organização.');
     }
 
     const tenantId = query.tenantId;

@@ -64,7 +64,7 @@ export class WorkspacesService {
       return await this.prisma.$transaction(async (tx) => {
         await this.access.lockTenant(tx, tenantId);
         const activeTenant = await tx.tenant.count({ where: { id: tenantId, status: RecordStatus.ACTIVE } });
-        if (!activeTenant) throw new NotFoundException('Cliente não encontrado.');
+        if (!activeTenant) throw new NotFoundException('Organização não encontrada.');
         const workspace = await tx.workspace.create({
           data: {
             tenantId,
@@ -77,7 +77,7 @@ export class WorkspacesService {
           where: { tenantId, role: ClientRole.CLIENT_ADMIN, status: MembershipStatus.ACTIVE },
           select: { userId: true },
         });
-        if (admins.length === 0) throw new ConflictException('O cliente precisa manter um CLIENT_ADMIN ativo.');
+        if (admins.length === 0) throw new ConflictException('A organização precisa manter pelo menos um administrador ativo.');
         await tx.workspaceMembership.createMany({
           data: admins.map(({ userId }) => ({
             tenantId, workspaceId: workspace.id, userId,
@@ -162,10 +162,10 @@ export class WorkspacesService {
       where: { tenantId_userId: { tenantId: workspace.tenantId, userId: input.userId } },
     });
     if (!clientMembership || clientMembership.status !== MembershipStatus.ACTIVE) {
-      throw new NotFoundException('Usuário não possui vínculo ativo com o cliente.');
+      throw new NotFoundException('O usuário não possui vínculo ativo com a organização.');
     }
     if (clientMembership.role === ClientRole.CLIENT_ADMIN) {
-      throw new ConflictException('CLIENT_ADMIN já possui acesso administrativo automático ao workspace.');
+      throw new ConflictException('O administrador da organização já possui acesso administrativo automático ao workspace.');
     }
     return this.serializable(async (tx) => {
       const membership = await tx.workspaceMembership.upsert({
@@ -195,7 +195,7 @@ export class WorkspacesService {
       where: { tenantId: workspace.tenantId, userId, role: ClientRole.CLIENT_ADMIN, status: MembershipStatus.ACTIVE },
     });
     if (inheritedClientAdmin && (input.role === WorkspaceRole.WORKSPACE_MEMBER || (input.status && input.status !== MembershipStatus.ACTIVE))) {
-      throw new ConflictException('CLIENT_ADMIN possui acesso administrativo automático a todos os workspaces.');
+      throw new ConflictException('O administrador da organização possui acesso administrativo automático a todos os workspaces.');
     }
     const removesAdmin = existing.role === WorkspaceRole.WORKSPACE_ADMIN && existing.status === MembershipStatus.ACTIVE
       && (input.role === WorkspaceRole.WORKSPACE_MEMBER || (input.status && input.status !== MembershipStatus.ACTIVE));

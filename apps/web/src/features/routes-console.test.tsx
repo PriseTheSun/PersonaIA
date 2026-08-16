@@ -51,7 +51,7 @@ function renderAuthenticatedPage(Page: () => React.JSX.Element) {
 
 describe('authenticated routes remain console-clean', () => {
   it.each([
-    ['tenants', TenantsPage, 'Clientes'],
+    ['tenants', TenantsPage, 'Organizações'],
     ['administrators', AdminsPage, 'Administradores'],
     ['workspaces', WorkspacesPage, 'Workspaces'],
     ['projects', ProjectsPage, 'Projetos'],

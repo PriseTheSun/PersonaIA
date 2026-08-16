@@ -43,7 +43,7 @@ export class TenantsService {
         _count: { select: { clientMemberships: true, workspaces: true, projects: true, personas: true, questionnaires: true } },
       },
     });
-    if (!tenant) throw new NotFoundException('Cliente não encontrado.');
+    if (!tenant) throw new NotFoundException('Organização não encontrada.');
     return tenant;
   }
 
@@ -116,7 +116,7 @@ export class TenantsService {
 
   async updateTenant(tenantId: string, input: UpdateTenantInput, actor: Principal) {
     const existing = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
-    if (!existing) throw new NotFoundException('Cliente não encontrado.');
+    if (!existing) throw new NotFoundException('Organização não encontrada.');
     return this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${tenantId}, 0))`;
       const tenant = await tx.tenant.update({
@@ -140,7 +140,7 @@ export class TenantsService {
 
   async removeTenant(tenantId: string, actor: Principal) {
     const existing = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
-    if (!existing) throw new NotFoundException('Cliente não encontrado.');
+    if (!existing) throw new NotFoundException('Organização não encontrada.');
     await this.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${tenantId}, 0))`;
       await tx.tenant.update({ where: { id: tenantId }, data: { status: RecordStatus.REMOVED } });

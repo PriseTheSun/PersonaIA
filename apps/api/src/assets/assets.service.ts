@@ -109,7 +109,7 @@ export class AssetsService {
     return this.prisma.$transaction(async (tx) => {
       await this.access.lockTenant(tx, tenantId);
       const activeTenant = await tx.tenant.count({ where: { id: tenantId, status: RecordStatus.ACTIVE } });
-      if (!activeTenant) throw new NotFoundException('Cliente não encontrado.');
+      if (!activeTenant) throw new NotFoundException('Organização não encontrada.');
       const asset = kind === 'PERSONA'
         ? await tx.persona.create({ data: { tenantId, name: input.name.trim(), description: input.description?.trim(), data: input.data as Prisma.InputJsonValue } })
         : await tx.questionnaire.create({ data: { tenantId, name: input.name.trim(), description: input.description?.trim(), data: input.data as Prisma.InputJsonValue } });
@@ -249,7 +249,7 @@ export class AssetsService {
       const tenantAdmin = this.access.isSuper(actor) || (await tx.clientMembership.count({
         where: { tenantId, userId: actor.id, role: ClientRole.CLIENT_ADMIN, status: MembershipStatus.ACTIVE },
       })) > 0;
-      if (!tenantAdmin) throw new ForbiddenException('A substituição em lote exige CLIENT_ADMIN; use associação/desassociação por workspace.');
+      if (!tenantAdmin) throw new ForbiddenException('A substituição em lote exige um administrador da organização; use a associação por workspace.');
       const manageable = new Set<string>();
       for (const workspaceId of [...new Set([...liveIds, ...requestedIds])]) manageable.add(workspaceId);
       const preservedIds = liveIds.filter((workspaceId) => !manageable.has(workspaceId));

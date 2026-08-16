@@ -59,14 +59,14 @@ export class AccessControlService {
       where: { id: tenantId, ...(this.isSuper(actor) ? { status: { not: 'REMOVED' } } : { status: 'ACTIVE' }) },
       select: { id: true, name: true, slug: true, status: true },
     });
-    if (!tenant) throw new NotFoundException('Cliente não encontrado.');
+    if (!tenant) throw new NotFoundException('Organização não encontrada.');
     if (this.isSuper(actor)) return tenant;
     const membership = await this.prisma.clientMembership.findUnique({
       where: { tenantId_userId: { tenantId, userId: actor.id } },
       select: { role: true, status: true },
     });
     if (!membership || membership.status !== MembershipStatus.ACTIVE || (admin && membership.role !== ClientRole.CLIENT_ADMIN)) {
-      throw new NotFoundException('Cliente não encontrado.');
+      throw new NotFoundException('Organização não encontrada.');
     }
     return tenant;
   }

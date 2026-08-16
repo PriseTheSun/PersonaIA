@@ -29,7 +29,7 @@ export class ClientMembershipsService {
           clientMembership: { status: MembershipStatus.ACTIVE }, workspace: { status: RecordStatus.ACTIVE },
         },
       });
-      if (!workspaceAdmin) throw new NotFoundException('Cliente não encontrado.');
+      if (!workspaceAdmin) throw new NotFoundException('Organização não encontrada.');
     }
     return this.prisma.clientMembership.findMany({
       where: { tenantId, ...(tenantAdmin ? {} : { status: MembershipStatus.ACTIVE }) },
@@ -51,7 +51,7 @@ export class ClientMembershipsService {
     return this.serializable(async (tx) => {
       await this.access.lockTenant(tx, tenantId);
       const activeTenant = await tx.tenant.count({ where: { id: tenantId, status: RecordStatus.ACTIVE } });
-      if (!activeTenant) throw new NotFoundException('Cliente não encontrado.');
+      if (!activeTenant) throw new NotFoundException('Organização não encontrada.');
       const membership = await tx.clientMembership.upsert({
         where: { tenantId_userId: { tenantId, userId: user.id } },
         update: { role: input.role, status: input.status },
@@ -87,7 +87,7 @@ export class ClientMembershipsService {
         const activeAdmins = await tx.clientMembership.count({
           where: { tenantId, role: ClientRole.CLIENT_ADMIN, status: MembershipStatus.ACTIVE },
         });
-        if (activeAdmins <= 1) throw new ConflictException('Mantenha pelo menos um CLIENT_ADMIN ativo.');
+        if (activeAdmins <= 1) throw new ConflictException('Mantenha pelo menos um administrador ativo na organização.');
       }
       const membership = await tx.clientMembership.update({
         where: { id: existing.id },

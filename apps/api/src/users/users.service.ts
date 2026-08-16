@@ -49,12 +49,12 @@ export class UsersService {
     if (nextRole === Role.SUPER_ADMIN) {
       nextTenantId = null;
     } else {
-      if (!nextTenantId) throw new ConflictException('Selecione um cliente para o contexto padrão.');
+      if (!nextTenantId) throw new ConflictException('Selecione uma organização para o contexto padrão.');
       const membership = await this.prisma.clientMembership.findUnique({
         where: { tenantId_userId: { tenantId: nextTenantId, userId: id } },
       });
       if (!membership || membership.status !== MembershipStatus.ACTIVE) {
-        throw new ConflictException('Crie ou ative o vínculo do usuário com o cliente antes de alterar seu contexto padrão.');
+        throw new ConflictException('Crie ou ative o vínculo do usuário com a organização antes de alterar seu contexto padrão.');
       }
       nextRole = membership.role === ClientRole.CLIENT_ADMIN ? Role.CLIENT_ADMIN : Role.PROJECT_USER;
     }
