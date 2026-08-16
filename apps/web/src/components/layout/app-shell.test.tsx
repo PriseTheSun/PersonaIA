@@ -55,6 +55,15 @@ describe('AppShell', () => {
     expect(screen.getByRole('button', { name: 'Tema' }).closest('header')).not.toBeNull();
   });
 
+  it('shows the user classification as badges without the global platform label', () => {
+    renderShell();
+
+    expect(screen.queryByText('Visão global da plataforma')).not.toBeInTheDocument();
+    const classifications = screen.getAllByText('Superadministrador');
+    expect(classifications).toHaveLength(2);
+    expect(classifications.every((classification) => classification.closest('[data-slot="badge"]'))).toBe(true);
+  });
+
   it('keeps sidebar icons and labels on one line', () => {
     renderShell();
     const accessLink = screen.getByRole('link', { name: 'Controle de acessos' });

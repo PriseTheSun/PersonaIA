@@ -1,6 +1,7 @@
 import { ChevronUp, LogOut } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Avatar } from '@/components/shared/avatar';
+import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from '@/components/ui/sidebar';
 import { useAuth } from '@/features/auth/auth-store';
@@ -18,9 +19,11 @@ export function AccountMenu() {
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton size="lg" tooltip={t('common.account')} aria-label={t('common.account')}>
               <Avatar name={auth.user.name} className="size-8" />
-              <span className="grid flex-1 text-left text-sm leading-tight">
+              <span className="grid min-w-0 flex-1 gap-1 text-left text-sm leading-tight">
                 <span className="truncate font-medium">{auth.user.name}</span>
-                <span className="truncate text-xs text-sidebar-foreground/60">{t(`roles.${auth.user.role}`)}</span>
+                <Badge variant="outline" className="w-fit max-w-full truncate border-sidebar-border bg-sidebar-accent px-1.5 py-0 text-[10px] leading-4 text-sidebar-accent-foreground">
+                  {t(`roles.${auth.effectiveRole ?? auth.user.role}`)}
+                </Badge>
               </span>
               <ChevronUp className="ml-auto" aria-hidden="true" />
             </SidebarMenuButton>

@@ -11,14 +11,7 @@ export function ContextSwitcher() {
   const activeContext = auth.activeContext ?? contexts.find((context) => context.tenantId === auth.activeScope?.tenantId) ?? contexts[0];
   const activeWorkspace = activeContext?.workspaces.find((workspace) => workspace.id === auth.activeScope?.workspaceId && workspace.status === 'ACTIVE');
 
-  if (contexts.length === 0) {
-    return auth.user.role === 'SUPER_ADMIN' ? (
-      <div className="flex min-w-0 items-center gap-2 rounded-md bg-sidebar-accent px-2 py-2 text-sidebar-accent-foreground group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0" title={t('context.platform')}>
-        <Building2 className="size-4 shrink-0" aria-hidden="true" />
-        <span className="truncate text-xs font-medium group-data-[collapsible=icon]:hidden">{t('context.platform')}</span>
-      </div>
-    ) : null;
-  }
+  if (contexts.length === 0) return null;
 
   return (
     <div className="space-y-2 group-data-[collapsible=icon]:space-y-0">

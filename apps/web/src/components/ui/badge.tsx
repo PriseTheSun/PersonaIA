@@ -16,6 +16,6 @@ const badgeVariants = cva('inline-flex items-center rounded-full px-2.5 py-0.5 t
   defaultVariants: { variant: 'default' },
 });
 
-export function Badge({ className, variant, ...props }: HTMLAttributes<HTMLDivElement> & VariantProps<typeof badgeVariants>) {
-  return <div className={cn(badgeVariants({ variant }), className)} {...props} />;
+export function Badge({ className, variant, ...props }: HTMLAttributes<HTMLSpanElement> & VariantProps<typeof badgeVariants>) {
+  return <span data-slot="badge" className={cn(badgeVariants({ variant }), className)} {...props} />;
 }

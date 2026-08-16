@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { AppLogo } from '@/components/shared/app-logo';
 import { LanguageSelector } from '@/components/shared/language-selector';
 import { ThemeSelector } from '@/components/shared/theme-selector';
+import { Badge } from '@/components/ui/badge';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader, SidebarInset, SidebarProvider, SidebarRail, SidebarTrigger } from '@/components/ui/sidebar';
 import { useAuth } from '@/features/auth/auth-store';
 import { AccountMenu } from './account-menu';
@@ -31,7 +32,9 @@ export function AppShell() {
           <div className="flex min-w-0 items-center gap-2">
             <SidebarTrigger label={t('common.openMenu')} />
             <span className="lg:hidden"><AppLogo compact /></span>
-            <p className="hidden truncate text-sm text-muted-foreground lg:block">{t(`roles.${auth.effectiveRole ?? auth.user.role}`)}</p>
+            <Badge variant="outline" className="hidden max-w-64 truncate bg-card text-muted-foreground lg:inline-flex">
+              {t(`roles.${auth.effectiveRole ?? auth.user.role}`)}
+            </Badge>
           </div>
           <div className="ml-auto flex items-center gap-0.5"><LanguageSelector /><ThemeSelector /><NotificationsMenu /></div>
         </header>
