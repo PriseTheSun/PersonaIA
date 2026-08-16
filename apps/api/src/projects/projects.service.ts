@@ -129,24 +129,41 @@ export class ProjectsService {
         nextWorkspaceId = null;
       }
     }
-    return this.prisma.$transaction(async (tx) => {
-      const project = await tx.project.update({
-        where: { id },
-        data: {
-          ...(input.name ? { name: input.name.trim() } : {}),
-          ...(input.description !== undefined ? { description: input.description?.trim() ?? null } : {}),
-          ...(input.status ? { status: input.status as RecordStatus } : {}),
-          ...(nextWorkspaceId !== undefined ? { workspaceId: nextWorkspaceId } : {}),
-        },
-      });
-      await tx.auditLog.create({
-        data: {
-          tenantId: projectContext.tenantId, actorId: actor.id, action: 'PROJECT_UPDATED', targetType: 'Project', targetId: id,
-          scopeType: 'PROJECT', scopeId: id, metadata: { changed: Object.keys(input) },
-        },
-      });
-      return project;
-    });
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        if (nextWorkspaceId !== undefined) {
+          await this.accessControl().lockTenant(tx, projectContext.tenantId);
+          if (nextWorkspaceId) {
+            await this.accessControl().lockWorkspace(tx, nextWorkspaceId);
+            const activeWorkspace = await tx.workspace.count({
+              where: { id: nextWorkspaceId, tenantId: projectContext.tenantId, status: RecordStatus.ACTIVE },
+            });
+            if (!activeWorkspace) throw new NotFoundException('Workspace não encontrado.');
+          }
+        }
+        const project = await tx.project.update({
+          where: { id },
+          data: {
+            ...(input.name ? { name: input.name.trim() } : {}),
+            ...(input.description !== undefined ? { description: input.description?.trim() ?? null } : {}),
+            ...(input.status ? { status: input.status as RecordStatus } : {}),
+            ...(nextWorkspaceId !== undefined ? { workspaceId: nextWorkspaceId } : {}),
+          },
+        });
+        await tx.auditLog.create({
+          data: {
+            tenantId: projectContext.tenantId, actorId: actor.id, action: 'PROJECT_UPDATED', targetType: 'Project', targetId: id,
+            scopeType: 'PROJECT', scopeId: id, metadata: { changed: Object.keys(input) },
+          },
+        });
+        return project;
+      }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
+        throw new ConflictException('A organização do projeto foi alterada por outra operação. Recarregue e tente novamente.');
+      }
+      throw error;
+    }
   }
 
   async remove(id: string, actor: Principal) {

@@ -15,8 +15,9 @@ Baseline de verificação: OWASP ASVS 5.0.0 nível 2 e OWASP API Security Top 10
 - `CLIENT_ADMIN` é um papel de vínculo no cliente, nunca um papel global do usuário.
 - Uma identidade pode ter vínculos independentes em N clientes e workspaces; um
   vínculo jamais concede autoridade sobre os demais.
-- Um workspace pertence a exatamente um cliente e um projeto pertence a exatamente
-  um workspace. O workspace de um projeto é imutável.
+- Um workspace pertence a exatamente um cliente. Um projeto pertence diretamente
+  ao cliente e pode, opcionalmente, ser agrupado em um workspace do mesmo cliente;
+  mover ou desagrupar o projeto não altera sua organização.
 - Personas e questionários pertencem a um cliente e são associados a workspaces do
   mesmo cliente somente por referência.
 - O cliente/workspace efetivo é selecionado explicitamente na rota e confirmado
@@ -47,15 +48,16 @@ Estas regras devem existir no PostgreSQL, além das validações da API:
 
 1. Toda tabela pertencente a cliente possui `tenant_id NOT NULL`; tabelas de
    workspace também carregam/validam o cliente pai por FK composta.
-2. `workspaces` possui chave única `(tenant_id, id)` e `projects` referencia o par
-   `(tenant_id, workspace_id)`. Nenhuma API ou grant de runtime pode mover projeto.
+2. `workspaces` possui chave única `(tenant_id, id)` e `projects.workspace_id` é
+   opcional. A FK composta impede agrupamento cruzado entre clientes; mover ou
+   desagrupar um projeto preserva seu `tenant_id`, membros e permissões.
 3. `client_memberships` possui unicidade `(tenant_id, user_id)` e
    `workspace_memberships` referencia simultaneamente workspace, cliente e vínculo
    do usuário no cliente.
 4. Associações de persona/questionário possuem FKs compostas que garantem que ativo
    e workspace pertençam ao mesmo cliente.
-5. Uso de ativo em projeto valida cliente e workspace e conserva snapshot imutável
-   dos dados usados.
+5. Uso de ativo em projeto valida sempre o cliente e, quando houver agrupamento,
+   também o workspace; o snapshot imutável conserva os dados usados.
 6. Remoção, suspensão ou downgrade de administradores usa transação serializável ou
    lock transacional por escopo, impedindo concorrência que remova o último
    `CLIENT_ADMIN` ou `WORKSPACE_ADMIN` ativo.

@@ -34,7 +34,7 @@ interface. Teste unitário com mock não comprova isolamento, transação ou con
 | CA-06 | `questionnaire-A` é associado a WA1 e WA2 e editado | mesmas garantias de CA-05 | RN-06, RN-07, RN-10, RN-PORT-01 | P1 |
 | CA-07 | ativo A é desassociado apenas de WA1 | registro do cliente persiste, WA2 mantém referência e PA1 conserva snapshot histórico quando já houve uso | RN-08, RN-14, RN-PORT-02, RN-PORT-04, RN-PORT-06 | P1 |
 | CA-08 | CLIENT_ADMIN tenta excluir ativo usado por projeto ativo | resposta de conflito, ativo/referências/snapshots intactos; após remover/inativar dependência conforme contrato, exclusão atômica é possível | RN-09, RN-13, RN-14, RN-PORT-03 | P1 |
-| CA-09 | tentativa de mover PA1 para WA2 ou adicionar segundo workspace | schema/API rejeita `workspaceId` no PATCH; banco impede dupla pertença; PA1 permanece em WA1 | RN-11 | P1 |
+| CA-09 | CLIENT_ADMIN organiza PA1 em WA2, remove-o da pasta e exclui WA2 | projeto pode ter zero ou um workspace do mesmo cliente; mover/desagrupar preserva projeto, membros, permissões e histórico; workspace de B é rejeitado | RN-11 | P1 |
 | CA-10 | duas requisições simultâneas removem/suspendem os últimos admins | no máximo uma operação pode deixar de existir; cliente conserva CLIENT_ADMIN ativo e workspace conserva WORKSPACE_ADMIN efetivo; sem estado intermediário inválido | RN-01, RN-02, RN-13 | P1 |
 | CA-11 | membro READ tenta WRITE; membro WRITE tenta ADMIN | READ não cria/edita; WRITE cria/edita mas não configura permissões; respostas não persistem efeito e geram auditoria de segurança conforme política | RN-04, RN-05 | P1 |
 | CA-12 | SUPER_ADMIN vincula UM a A e B | uma identidade/e-mail global, duas memberships independentes; trocar estado/papel/permissão em A não altera B nem exige novo login para fazer efeito | RN-03, RN-05, RN-10, RN-14 | P0 |
@@ -61,7 +61,7 @@ para editar/excluir projetos além da matriz. Recomenda-se criar uma feature
 | RN-08 | desassociação preserva ativo e outras referências | DELETE de associação apaga registro do tenant ou outras associações | integração + API |
 | RN-09 | exclusão livre quando sem uso ativo | projeto ativo dependente, uso simultâneo durante DELETE, associação existente sem uso, snapshot histórico | integração concorrente |
 | RN-10 | associação dentro do mesmo cliente | asset A → WB1, asset B → WA1, IDs em path/body trocados, asset ID inexistente versus estrangeiro | API + FK composta/constraint |
-| RN-11 | projeto nasce e permanece em um workspace | PATCH com `workspaceId`, mass assignment, SQL de segundo vínculo/movimentação, workspace A + tenant B | schema + integração DB |
+| RN-11 | workspace é pasta opcional: projeto nasce sem pasta ou em uma, pode mover/desagrupar no mesmo cliente | workspace A + tenant B, mover `tenantId`, usuário sem administração da organização, exclusão da pasta apagando projeto | schema + integração DB |
 | RN-12 | override ALLOW e DENY são calculados corretamente | `DENY READ` contra `ADMIN` herdado; DENY feature específica não contamina outra; override de PA1 não chega a PA2 | resolver unitário + API |
 | RN-13 | operações críticas commitam tudo | falha injetada/constraint no meio de troca de admin ou exclusão; dois writers concorrentes; verificar rollback e invariantes | PostgreSQL real |
 | RN-14 | auditoria imutável e completa | sem ator, ação, escopo ou timestamp; audit do tenant errado; UPDATE/DELETE por runtime role; segredo/PII indevida em metadata | DB + API + role runtime |

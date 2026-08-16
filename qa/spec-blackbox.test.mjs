@@ -293,22 +293,38 @@ test('CY-05: mass assignment não troca tenant/role/status ao criar workspace', 
   assert.equal(response.status, 400, `mass assignment aceito (${response.status})`);
 });
 
-test('RN-11/CY-05: projeto não aceita mudança de workspace', async (t) => {
+test('RN-11/CY-05: workspace é uma pasta opcional e reversível do projeto', async (t) => {
   if (!requireMutation(t) || !requireConfig(
     t,
     'baseUrl',
     'credentials.clientAdminA',
     'ids.projectA1',
+    'ids.workspaceA1',
     'ids.workspaceA2'
   )) return;
   if (!allowedOrigin) assert.fail('origin permitido não configurado');
   const session = await login('clientAdminA');
   assert.ok(session.csrfToken && session.cookie, 'login não forneceu cookies CSRF');
-  const response = await request('PATCH', `/projects/${ids.projectA1}`, {
-    session,
-    body: { workspaceId: ids.workspaceA2 }
-  });
-  assert.equal(response.status, 400, `workspaceId foi aceito no PATCH (${response.status})`);
+  try {
+    const grouped = await request('PATCH', `/projects/${ids.projectA1}`, {
+      session,
+      body: { workspaceId: ids.workspaceA2 }
+    });
+    assert.equal(grouped.status, 200, `projeto não foi movido para a pasta (${grouped.status})`);
+    assert.equal(grouped.json?.workspaceId, ids.workspaceA2);
+
+    const ungrouped = await request('PATCH', `/projects/${ids.projectA1}`, {
+      session,
+      body: { workspaceId: null }
+    });
+    assert.equal(ungrouped.status, 200, `projeto não foi retirado da pasta (${ungrouped.status})`);
+    assert.equal(ungrouped.json?.workspaceId, null);
+  } finally {
+    await request('PATCH', `/projects/${ids.projectA1}`, {
+      session,
+      body: { workspaceId: ids.workspaceA1 }
+    });
+  }
 });
 
 test('RN-05/CY-01: JWT perde acesso na requisição seguinte à revogação', async (t) => {

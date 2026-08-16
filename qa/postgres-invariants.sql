@@ -90,10 +90,28 @@ SELECT pg_temp.expect_sqlstate(
 INSERT INTO "Project" ("id", "tenantId", "workspaceId", "name", "slug", "status", "updatedAt") VALUES
   ('10000000-0000-4000-8000-0000000004a1', '10000000-0000-4000-8000-00000000000a', '10000000-0000-4000-8000-0000000000a1', 'QA PA1', 'qa-pa1', 'ACTIVE', CURRENT_TIMESTAMP);
 
--- RN-11: projeto não pode mudar de workspace ou tenant após criado.
+-- RN-11: workspace é uma pasta opcional; o projeto pode ser agrupado,
+-- movido e desagrupado dentro da mesma organização.
+UPDATE "Project"
+SET "workspaceId" = '10000000-0000-4000-8000-0000000000a2'
+WHERE "id" = '10000000-0000-4000-8000-0000000004a1';
+
+UPDATE "Project"
+SET "workspaceId" = NULL
+WHERE "id" = '10000000-0000-4000-8000-0000000004a1';
+
+INSERT INTO "Project" ("id", "tenantId", "workspaceId", "name", "slug", "status", "updatedAt") VALUES
+  ('10000000-0000-4000-8000-0000000004a2', '10000000-0000-4000-8000-00000000000a', NULL, 'QA sem pasta', 'qa-sem-pasta', 'ACTIVE', CURRENT_TIMESTAMP);
+
+-- Restaura a pasta para os testes de uso abaixo.
+UPDATE "Project"
+SET "workspaceId" = '10000000-0000-4000-8000-0000000000a1'
+WHERE "id" = '10000000-0000-4000-8000-0000000004a1';
+
+-- A organização do projeto continua imutável.
 SELECT pg_temp.expect_sqlstate(
   $sql$UPDATE "Project"
-       SET "workspaceId" = '10000000-0000-4000-8000-0000000000a2'
+       SET "tenantId" = '10000000-0000-4000-8000-00000000000b'
        WHERE "id" = '10000000-0000-4000-8000-0000000004a1'$sql$,
   '23514'
 );
