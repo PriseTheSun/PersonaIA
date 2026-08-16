@@ -7,12 +7,8 @@ export const updateAvatarSchema = z.object({
 }).strict();
 
 export const changePasswordSchema = z.object({
-  currentPassword: z.string().min(1, 'Informe a senha atual.').max(128),
   newPassword: passwordSchema,
-}).strict().refine(
-  ({ currentPassword, newPassword }) => currentPassword !== newPassword,
-  { path: ['newPassword'], message: 'A nova senha deve ser diferente da senha atual.' },
-);
+}).strict();
 
 export type UpdateAvatarInput = z.infer<typeof updateAvatarSchema>;
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;

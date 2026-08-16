@@ -3,10 +3,10 @@ import { z } from 'zod';
 export const passwordSchema = z.string()
   .min(12, 'A senha deve ter pelo menos 12 caracteres.')
   .max(128, 'A senha deve ter no máximo 128 caracteres.')
-  .regex(/[a-z]/, 'Inclua uma letra minúscula.')
-  .regex(/[A-Z]/, 'Inclua uma letra maiúscula.')
-  .regex(/[0-9]/, 'Inclua um número.')
-  .regex(/[^A-Za-z0-9]/, 'Inclua um caractere especial.');
+  .regex(/\p{Ll}/u, 'Inclua uma letra minúscula.')
+  .regex(/\p{Lu}/u, 'Inclua uma letra maiúscula.')
+  .regex(/\p{N}/u, 'Inclua um número.')
+  .regex(/[^\p{L}\p{N}\s]/u, 'Inclua um caractere especial.');
 
 export const loginSchema = z.object({
   email: z.string().email().max(254),

@@ -1,15 +1,11 @@
 import { z } from 'zod';
 import { clientRoleSchema, featureSchema, permissionEffectSchema, permissionSchema, accessLevelSchema, workspaceRoleSchema } from '@/lib/schemas';
+import { strongPassword } from '@/lib/password-policy';
+
+export { strongPassword } from '@/lib/password-policy';
 
 const name = z.string().trim().min(2, 'forms.validation.name').max(120);
 const email = z.string().trim().email('validation.email').max(254);
-export const strongPassword = z.string()
-  .min(12, 'forms.validation.password')
-  .max(128, 'forms.validation.password')
-  .regex(/[a-z]/, 'forms.validation.password')
-  .regex(/[A-Z]/, 'forms.validation.password')
-  .regex(/[0-9]/, 'forms.validation.password')
-  .regex(/[^A-Za-z0-9]/, 'forms.validation.password');
 
 export const createTenantFormSchema = z.object({
   name,

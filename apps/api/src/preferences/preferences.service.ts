@@ -78,10 +78,6 @@ export class PreferencesService {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`personaia:user-preferences:${actor.id}`}, 0))`;
       const user = await tx.user.findUnique({ where: { id: actor.id }, select: { id: true, passwordHash: true } });
       if (!user) throw new NotFoundException('Usuário não encontrado.');
-      const matches = await argon2.verify(user.passwordHash, input.currentPassword).catch(() => false);
-      if (!matches) {
-        throw new BadRequestException({ code: 'CURRENT_PASSWORD_INVALID', message: 'A senha atual está incorreta.' });
-      }
       const repeatsPassword = await argon2.verify(user.passwordHash, input.newPassword).catch(() => false);
       if (repeatsPassword) {
         throw new BadRequestException({ code: 'PASSWORD_UNCHANGED', message: 'A nova senha deve ser diferente da senha atual.' });

@@ -10,6 +10,7 @@ import { MutationNotice } from '@/components/shared/inline-form';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { PasswordInput } from '@/features/auth/password-input';
+import { PasswordRequirements } from '@/features/auth/password-requirements';
 import { useAuth } from '@/features/auth/auth-store';
 import { ApiError, apiRequest, csrfHeaders } from '@/lib/api';
 import { changePasswordFormSchema, type ChangePasswordFormInput } from './preferences-schemas';
@@ -21,25 +22,26 @@ export function PasswordPreference() {
   const auth = useAuth();
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
-  const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<ChangePasswordFormInput>({
+  const { register, handleSubmit, watch, formState: { errors, isSubmitting } } = useForm<ChangePasswordFormInput>({
     resolver: zodResolver(changePasswordFormSchema),
-    defaultValues: { currentPassword: '', newPassword: '', confirmPassword: '' },
+    defaultValues: { newPassword: '', confirmPassword: '' },
   });
+  const newPassword = watch('newPassword');
 
-  const submit = handleSubmit(async ({ currentPassword, newPassword }) => {
+  const submit = handleSubmit(async ({ newPassword: password }) => {
     setError(null);
     try {
       await apiRequest('/preferences/password', responseSchema, {
         method: 'PATCH',
         headers: csrfHeaders(),
-        body: { currentPassword, newPassword },
+        body: { newPassword: password },
       });
       toast.success(t('preferences.passwordUpdated'));
       await auth.logout();
       navigate('/login', { replace: true });
     } catch (cause) {
-      if (cause instanceof ApiError && cause.code === 'CURRENT_PASSWORD_INVALID') {
-        setError(t('preferences.currentPasswordInvalid'));
+      if (cause instanceof ApiError && cause.code === 'PASSWORD_UNCHANGED') {
+        setError(t('preferences.passwordUnchanged'));
       } else {
         setError(t('preferences.passwordError'));
       }
@@ -49,7 +51,7 @@ export function PasswordPreference() {
   const field = (id: string, label: string, registration: ReturnType<typeof register>, message?: string) => (
     <div className="space-y-2">
       <Label htmlFor={id}>{label}</Label>
-      <PasswordInput id={id} autoComplete={id === 'current-password' ? 'current-password' : 'new-password'} aria-invalid={Boolean(message)} aria-describedby={message ? `${id}-error` : undefined} {...registration} />
+      <PasswordInput id={id} autoComplete="new-password" aria-invalid={Boolean(message)} aria-describedby={[id === 'new-password' ? 'password-requirements' : '', message ? `${id}-error` : ''].filter(Boolean).join(' ') || undefined} {...registration} />
       {message ? <p id={`${id}-error`} className="text-sm text-destructive" role="alert">{message}</p> : null}
     </div>
   );
@@ -65,12 +67,11 @@ export function PasswordPreference() {
       </div>
       <form onSubmit={submit} className="mt-6 space-y-4" noValidate>
         <MutationNotice message={error} type="error" />
-        {field('current-password', t('preferences.currentPassword'), register('currentPassword'), errors.currentPassword && t(errors.currentPassword.message!))}
         <div className="grid gap-4 sm:grid-cols-2">
           {field('new-password', t('preferences.newPassword'), register('newPassword'), errors.newPassword && t(errors.newPassword.message!))}
           {field('confirm-password', t('preferences.confirmNewPassword'), register('confirmPassword'), errors.confirmPassword && t(errors.confirmPassword.message!))}
         </div>
-        <p className="text-xs leading-5 text-muted-foreground">{t('preferences.passwordHint')}</p>
+        <PasswordRequirements id="password-requirements" password={newPassword} />
         <div className="flex justify-end pt-1">
           <Button type="submit" loading={isSubmitting}>{t('preferences.changePassword')}</Button>
         </div>

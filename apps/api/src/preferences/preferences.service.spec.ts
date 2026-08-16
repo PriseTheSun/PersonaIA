@@ -23,16 +23,16 @@ describe('PreferencesService password security', () => {
     return { service: new PreferencesService(prisma as never), tx };
   }
 
-  it('requires the current password and does not mutate the account when it is wrong', async () => {
+  it('rejects reusing the current password without mutating the account', async () => {
     const { service, tx } = await setup();
-    await expect(service.changePassword({ currentPassword: 'SenhaErrada#2026', newPassword: 'NovaSenha#Segura2027' }, actor)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.changePassword({ newPassword: 'SenhaAtual#2026' }, actor)).rejects.toBeInstanceOf(BadRequestException);
     expect(tx.user.update).not.toHaveBeenCalled();
     expect(tx.refreshSession.updateMany).not.toHaveBeenCalled();
   });
 
   it('re-hashes the password, bumps tokenVersion, revokes sessions and audits the change', async () => {
     const { service, tx } = await setup();
-    await expect(service.changePassword({ currentPassword: 'SenhaAtual#2026', newPassword: 'NovaSenha#Segura2027' }, actor)).resolves.toEqual({ success: true, requiresLogin: true });
+    await expect(service.changePassword({ newPassword: 'NovaSenha#Segura2027' }, actor)).resolves.toEqual({ success: true, requiresLogin: true });
     expect(tx.user.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: actor.id },
       data: expect.objectContaining({ passwordHash: expect.any(String), tokenVersion: { increment: 1 } }),

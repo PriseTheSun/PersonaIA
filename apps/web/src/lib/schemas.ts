@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { strongPassword } from './password-policy';
 
 export const roleSchema = z.enum(['SUPER_ADMIN', 'CLIENT_ADMIN', 'WORKSPACE_ADMIN', 'WORKSPACE_MEMBER', 'PROJECT_USER']);
 export type Role = z.infer<typeof roleSchema>;
@@ -290,11 +291,7 @@ export const registerSchema = z.object({
   name: z.string().trim().min(2, 'forms.validation.name').max(120),
   email: z.string().trim().email('validation.email').max(254),
   tenantSlug: z.string().trim().toLowerCase().min(2, 'forms.validation.slug').max(80).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'forms.validation.slug'),
-  password: z.string().min(12, 'forms.validation.password').max(128)
-    .regex(/[a-z]/, 'forms.validation.password')
-    .regex(/[A-Z]/, 'forms.validation.password')
-    .regex(/[0-9]/, 'forms.validation.password')
-    .regex(/[^A-Za-z0-9]/, 'forms.validation.password'),
+  password: strongPassword,
   confirmPassword: z.string().min(1, 'validation.required'),
 }).strict().refine((value) => value.password === value.confirmPassword, {
   path: ['confirmPassword'], message: 'registration.passwordMismatch'

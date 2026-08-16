@@ -72,11 +72,34 @@ describe('PreferencesPage', () => {
   it('blocks mismatched password confirmation on the client', async () => {
     const user = userEvent.setup();
     renderPage();
-    await user.type(screen.getByLabelText('Senha atual'), 'SenhaAtual#2026');
+    expect(screen.queryByLabelText('Senha atual')).not.toBeInTheDocument();
     await user.type(screen.getByLabelText('Nova senha'), 'NovaSenha#Segura2027');
     await user.type(screen.getByLabelText('Confirmar nova senha'), 'OutraSenha#Segura2027');
     await user.click(screen.getByRole('button', { name: 'Alterar senha' }));
     await waitFor(() => expect(screen.getByText('As novas senhas não coincidem.')).toBeVisible());
     expect(apiRequest).not.toHaveBeenCalled();
+  });
+
+  it('shows every password requirement and submits only the new password', async () => {
+    const user = userEvent.setup();
+    vi.mocked(apiRequest).mockResolvedValue({ success: true, requiresLogin: true });
+    logout.mockResolvedValue(undefined);
+    renderPage();
+
+    expect(screen.getByText('No mínimo 12 caracteres')).toBeVisible();
+    expect(screen.getByText('Uma letra maiúscula')).toBeVisible();
+    expect(screen.getByText('Uma letra minúscula')).toBeVisible();
+    expect(screen.getByText('Um número')).toBeVisible();
+    expect(screen.getByText('Um caractere especial')).toBeVisible();
+
+    await user.type(screen.getByLabelText('Nova senha'), 'NovaSenha#Segura2027');
+    await user.type(screen.getByLabelText('Confirmar nova senha'), 'NovaSenha#Segura2027');
+    await user.click(screen.getByRole('button', { name: 'Alterar senha' }));
+
+    await waitFor(() => expect(apiRequest).toHaveBeenCalledWith('/preferences/password', expect.anything(), expect.objectContaining({
+      method: 'PATCH',
+      body: { newPassword: 'NovaSenha#Segura2027' },
+    })));
+    expect(logout).toHaveBeenCalled();
   });
 });

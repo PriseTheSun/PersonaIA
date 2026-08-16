@@ -4,7 +4,12 @@ import { createProjectFormSchema, createTenantFormSchema, functionalPermissionIn
 describe('mutation form schemas', () => {
   it('enforces the backend password policy', () => {
     expect(strongPassword.safeParse('weak-password').success).toBe(false);
+    expect(strongPassword.safeParse('longpassword!1').success).toBe(false);
+    expect(strongPassword.safeParse('LONGPASSWORD!1').success).toBe(false);
+    expect(strongPassword.safeParse('LongPassword!!').success).toBe(false);
+    expect(strongPassword.safeParse('LongPassword12').success).toBe(false);
     expect(strongPassword.safeParse('Secure!Pass123').success).toBe(true);
+    expect(strongPassword.safeParse('ÁrvoreSegura!2026').success).toBe(true);
   });
 
   it('rejects unsafe tenant slugs', () => {
