@@ -17,19 +17,20 @@ describe('ProjectAccessCodeService', () => {
     expect(sameWindow.code).toBe(first.code);
     expect(nextWindow.code).not.toBe(first.code);
     expect(first.expiresAt).toBe('2026-08-15T20:10:00.000Z');
+    expect(first.serverTime).toBe(startedAt.toISOString());
   });
 
   it('resolves the current code only among active projects in the selected organization', async () => {
-    const project = { id: projectId, name: 'Pesquisa nacional' };
+    const project = { id: projectId, name: 'Pesquisa nacional', tenant: { id: tenantId, name: 'Organização Teste' } };
     const prisma = { project: { findMany: jest.fn().mockResolvedValue([project]) } };
     const service = new ProjectAccessCodeService(prisma as never, config as never);
     const code = service.current(projectId, startedAt).code;
 
-    await expect(service.resolveProject(tenantId, code.toLowerCase(), startedAt)).resolves.toEqual(project);
+    await expect(service.resolveProject(code.toLowerCase(), startedAt)).resolves.toEqual(project);
     expect(prisma.project.findMany).toHaveBeenCalledWith({
-      where: { tenantId, status: 'ACTIVE' },
-      select: { id: true, name: true },
+      where: { status: 'ACTIVE', tenant: { status: 'ACTIVE' } },
+      select: { id: true, name: true, tenant: { select: { id: true, name: true } } },
     });
-    await expect(service.resolveProject(tenantId, 'ABCDEFGHJKLM', startedAt)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.resolveProject('ABCDEFGHJKLM', startedAt)).rejects.toBeInstanceOf(BadRequestException);
   });
 });

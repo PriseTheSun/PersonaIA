@@ -10,32 +10,35 @@ type AccessRequestContext = {
   userId: string;
   userName: string;
   userEmail: string;
-  tenantId: string;
-  tenantName: string;
+  tenantId?: string;
+  tenantName?: string;
   requestedProjectId?: string;
   requestedProjectName?: string;
 };
 
-type MissingProjectContext = Omit<AccessRequestContext, 'requestedProjectId' | 'requestedProjectName'>;
+type MissingProjectContext = Omit<AccessRequestContext, 'requestedProjectId' | 'requestedProjectName' | 'tenantId' | 'tenantName'>
+  & Required<Pick<AccessRequestContext, 'tenantId' | 'tenantName'>>;
 
 @Injectable()
 export class NotificationsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async dispatchAccessRequest(tx: Prisma.TransactionClient, request: AccessRequestContext) {
-    const recipientIds = await this.adminRecipientIds(tx, request.tenantId);
+    const recipientIds = request.tenantId
+      ? await this.adminRecipientIds(tx, request.tenantId)
+      : await this.superAdminRecipientIds(tx);
     if (recipientIds.length === 0) return;
 
     await tx.notification.createMany({
       data: recipientIds.map((recipientId) => ({
         recipientId,
-        tenantId: request.tenantId,
+        tenantId: request.tenantId ?? null,
         type: ACCESS_REQUESTED_NOTIFICATION,
         targetId: request.userId,
         payload: {
           userName: request.userName,
           userEmail: request.userEmail,
-          tenantName: request.tenantName,
+          ...(request.tenantName ? { tenantName: request.tenantName } : {}),
           ...(request.requestedProjectId ? { requestedProjectId: request.requestedProjectId } : {}),
           ...(request.requestedProjectName ? { requestedProjectName: request.requestedProjectName } : {}),
         },
@@ -75,10 +78,7 @@ export class NotificationsService {
 
   private async adminRecipientIds(tx: Prisma.TransactionClient, tenantId: string) {
     const [superAdmins, clientAdmins] = await Promise.all([
-      tx.user.findMany({
-        where: { status: RecordStatus.ACTIVE, role: Role.SUPER_ADMIN },
-        select: { id: true },
-      }),
+      this.superAdminRecipientIds(tx),
       tx.clientMembership.findMany({
         where: {
           tenantId,
@@ -89,10 +89,18 @@ export class NotificationsService {
         select: { userId: true },
       }),
     ]);
-    return [...new Set([...superAdmins.map(({ id }) => id), ...clientAdmins.map(({ userId }) => userId)])];
+    return [...new Set([...superAdmins, ...clientAdmins.map(({ userId }) => userId)])];
   }
 
-  async resolveAccessRequest(tx: Prisma.TransactionClient, targetId: string, tenantId: string) {
+  private async superAdminRecipientIds(tx: Prisma.TransactionClient) {
+    const superAdmins = await tx.user.findMany({
+      where: { status: RecordStatus.ACTIVE, role: Role.SUPER_ADMIN },
+      select: { id: true },
+    });
+    return superAdmins.map(({ id }) => id);
+  }
+
+  async resolveAccessRequest(tx: Prisma.TransactionClient, targetId: string, tenantId: string | null) {
     const now = new Date();
     await tx.notification.updateMany({
       where: { type: ACCESS_REQUESTED_NOTIFICATION, targetId, tenantId, resolvedAt: null },

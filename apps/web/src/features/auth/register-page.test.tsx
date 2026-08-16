@@ -31,6 +31,8 @@ describe('RegisterPage', () => {
     expect(screen.getByRole('complementary')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Idioma' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Tema' })).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: /código da organização/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Código do projeto (opcional)' })).toHaveAttribute('maxlength', '12');
 
     const password = screen.getByLabelText('Senha');
     const confirmation = screen.getByLabelText('Confirmar senha');

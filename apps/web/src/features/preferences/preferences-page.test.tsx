@@ -5,7 +5,23 @@ import { MemoryRouter } from 'react-router-dom';
 import { I18nProvider } from '@/i18n/i18n-provider';
 import { AuthContext } from '@/features/auth/auth-store';
 import { apiRequest } from '@/lib/api';
+import { cropImageToDataUrl, readAvatarImage } from './avatar-image';
 import { PreferencesPage } from './preferences-page';
+
+vi.mock('react-easy-crop', () => ({
+  default: ({ onCropComplete }: { onCropComplete?: (area: { x: number; y: number; width: number; height: number }, pixels: { x: number; y: number; width: number; height: number }) => void }) => (
+    <button type="button" aria-label="Definir área de recorte" onClick={() => onCropComplete?.(
+      { x: 0, y: 0, width: 100, height: 100 },
+      { x: 12, y: 18, width: 320, height: 320 },
+    )} />
+  ),
+}));
+
+vi.mock('./avatar-image', () => ({
+  AvatarImageError: class AvatarImageError extends Error { constructor(public code: string) { super(code); } },
+  readAvatarImage: vi.fn(),
+  cropImageToDataUrl: vi.fn(),
+}));
 
 vi.mock('@/lib/api', () => ({
   ApiError: class ApiError extends Error { constructor(public status: number, public code: string, message: string) { super(message); } },
@@ -37,6 +53,8 @@ describe('PreferencesPage', () => {
     localStorage.clear();
     localStorage.setItem('personaia.locale', 'pt-BR');
     vi.mocked(apiRequest).mockReset();
+    vi.mocked(readAvatarImage).mockReset();
+    vi.mocked(cropImageToDataUrl).mockReset();
     refresh.mockReset();
     logout.mockReset();
   });
@@ -67,6 +85,32 @@ describe('PreferencesPage', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('A imagem deve ter no máximo 5 MB.');
     expect(apiRequest).not.toHaveBeenCalled();
+  });
+
+  it('opens a crop editor with zoom and only uploads the cropped image after confirmation', async () => {
+    const user = userEvent.setup();
+    vi.mocked(readAvatarImage).mockResolvedValue('data:image/png;base64,selected');
+    vi.mocked(cropImageToDataUrl).mockResolvedValue('data:image/jpeg;base64,cropped');
+    vi.mocked(apiRequest).mockResolvedValue({ hasAvatar: true, avatarUpdatedAt: '2026-08-16T12:00:00.000Z' });
+    refresh.mockResolvedValue(undefined);
+    renderPage();
+
+    await user.upload(screen.getByLabelText('Escolher foto'), new File(['image'], 'avatar.png', { type: 'image/png' }));
+
+    expect(screen.getByRole('dialog')).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Ajustar foto' })).toBeVisible();
+    expect(screen.getByRole('slider', { name: 'Zoom' })).toHaveValue('1');
+    expect(apiRequest).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Definir área de recorte' }));
+    await user.click(screen.getByRole('button', { name: 'Salvar foto' }));
+
+    await waitFor(() => expect(apiRequest).toHaveBeenCalledWith('/preferences/avatar', expect.anything(), expect.objectContaining({
+      method: 'PUT',
+      body: { image: 'data:image/jpeg;base64,cropped' },
+    })));
+    expect(cropImageToDataUrl).toHaveBeenCalledWith('data:image/png;base64,selected', { x: 12, y: 18, width: 320, height: 320 });
+    expect(refresh).toHaveBeenCalled();
   });
 
   it('blocks mismatched password confirmation on the client', async () => {

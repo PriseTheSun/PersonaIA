@@ -18,7 +18,6 @@ export const registerSchema = z.object({
   name: z.string().trim().min(2).max(120),
   email: z.string().email().max(254),
   password: passwordSchema,
-  tenantSlug: z.string().trim().toLowerCase().min(2).max(80).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
   projectCode: z.string().trim().toUpperCase().length(12).regex(/^[A-HJ-NP-Z2-9]{12}$/).optional(),
 }).strict();
 

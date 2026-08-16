@@ -25,7 +25,7 @@ export function RegisterPage() {
   const [serverError, setServerError] = useState<string | null>(null);
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<RegisterInput>({
     resolver: zodResolver(registerSchema),
-    defaultValues: { name: '', email: '', tenantSlug: '', projectCode: '', password: '', confirmPassword: '' },
+    defaultValues: { name: '', email: '', projectCode: '', password: '', confirmPassword: '' },
   });
 
   useEffect(() => { document.title = `${t('registration.title')} · ${t('common.appName')}`; }, [t]);
@@ -42,8 +42,7 @@ export function RegisterPage() {
       setComplete(true);
       toast.success(t('registration.requestSent'));
     } catch (error) {
-      if (error instanceof ApiError && error.code === 'INVALID_TENANT') setServerError(t('registration.invalidTenant'));
-      else if (error instanceof ApiError && error.code === 'INVALID_PROJECT_CODE') setServerError(t('registration.invalidProjectCode'));
+      if (error instanceof ApiError && error.code === 'INVALID_PROJECT_CODE') setServerError(t('registration.invalidProjectCode'));
       else setServerError(error instanceof ApiError ? error.message : t('auth.genericError'));
     }
   });
@@ -72,9 +71,6 @@ export function RegisterPage() {
                 <Input id="register-email" type="email" inputMode="email" autoComplete="username" placeholder={t('registration.emailPlaceholder')} className="h-11" aria-invalid={Boolean(errors.email)} {...register('email')} />
               </Field>
             </div>
-            <Field id="register-tenant" label={t('registration.tenantCode')} error={errors.tenantSlug && t(errors.tenantSlug.message!)} hint={t('registration.tenantHint')}>
-              <Input id="register-tenant" autoCapitalize="none" autoCorrect="off" placeholder={t('registration.tenantPlaceholder')} className="h-11" aria-invalid={Boolean(errors.tenantSlug)} {...register('tenantSlug')} />
-            </Field>
             <Field id="register-project-code" label={t('registration.projectCode')} error={errors.projectCode && t(errors.projectCode.message!)} hint={t('registration.projectCodeHint')}>
               <div className="relative">
                 <KeyRound className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />

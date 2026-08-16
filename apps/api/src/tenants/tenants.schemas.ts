@@ -42,6 +42,7 @@ export const addClientMembershipSchema = z.object({
 export const updateClientMembershipSchema = z.object({
   role: z.enum(['CLIENT_ADMIN', 'CLIENT_MEMBER']).optional(),
   status: z.enum(['PENDING_APPROVAL', 'INVITED', 'ACTIVE', 'SUSPENDED', 'REMOVED']).optional(),
+  projectId: z.string().uuid().nullable().optional(),
 }).strict().refine((value) => Object.keys(value).length > 0, 'Informe ao menos um campo.');
 
 export type CreateTenantInput = z.infer<typeof createTenantSchema>;

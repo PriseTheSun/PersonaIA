@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { ClientRole, MembershipStatus, Prisma, RecordStatus, Role } from '@prisma/client';
@@ -26,14 +26,10 @@ export class AuthService {
   ) {}
 
   async register(input: RegisterInput) {
-    const tenant = await this.prisma.tenant.findFirst({
-      where: { slug: input.tenantSlug, status: RecordStatus.ACTIVE },
-      select: { id: true, name: true }
-    });
-    if (!tenant) throw new BadRequestException({ code: 'INVALID_TENANT', message: 'Código da organização inválido.' });
     const requestedProject = input.projectCode
-      ? await this.projectCodes.resolveProject(tenant.id, input.projectCode)
+      ? await this.projectCodes.resolveProject(input.projectCode)
       : null;
+    const tenant = requestedProject?.tenant ?? null;
 
     const userName = input.name.trim();
     const userEmail = normalizeEmail(input.email);
@@ -53,6 +49,7 @@ export class AuthService {
     });
     const persistRegistration = () => this.prisma.$transaction(async (tx) => {
       let user = await tx.user.findUnique({ where: { email: userEmail } });
+      let registrationCreated = false;
       if (user) {
         const ownsIdentity = await argon2.verify(user.passwordHash, input.password).catch(() => false);
         if (!ownsIdentity) return;
@@ -62,7 +59,7 @@ export class AuthService {
       } else {
         user = await tx.user.create({
           data: {
-            tenantId: tenant.id,
+            tenantId: tenant?.id ?? null,
             name: userName,
             email: userEmail,
             passwordHash,
@@ -70,46 +67,51 @@ export class AuthService {
             status: RecordStatus.PENDING_APPROVAL,
           },
         });
+        registrationCreated = true;
       }
-      const existingMembership = await tx.clientMembership.findUnique({
-        where: { tenantId_userId: { tenantId: tenant.id, userId: user.id } },
-      });
-      if (!existingMembership) {
-        await tx.clientMembership.create({
-          data: {
-            tenantId: tenant.id,
-            userId: user.id,
-            requestedProjectId: requestedProject?.id,
-            role: ClientRole.CLIENT_MEMBER,
-            status: MembershipStatus.PENDING_APPROVAL,
-          },
+      if (tenant) {
+        const existingMembership = await tx.clientMembership.findUnique({
+          where: { tenantId_userId: { tenantId: tenant.id, userId: user.id } },
         });
-      } else if (existingMembership.status === MembershipStatus.REMOVED) {
-        await tx.clientMembership.update({
-          where: { id: existingMembership.id },
-          data: { status: MembershipStatus.PENDING_APPROVAL, requestedProjectId: requestedProject?.id ?? null },
-        });
-      } else if (
-        existingMembership.status === MembershipStatus.PENDING_APPROVAL
-        && requestedProject
-        && existingMembership.requestedProjectId !== requestedProject.id
-      ) {
-        await tx.clientMembership.update({
-          where: { id: existingMembership.id },
-          data: { requestedProjectId: requestedProject.id },
-        });
-      } else {
-        return;
+        if (!existingMembership) {
+          await tx.clientMembership.create({
+            data: {
+              tenantId: tenant.id,
+              userId: user.id,
+              requestedProjectId: requestedProject?.id,
+              role: ClientRole.CLIENT_MEMBER,
+              status: MembershipStatus.PENDING_APPROVAL,
+            },
+          });
+          registrationCreated = true;
+        } else if (existingMembership.status === MembershipStatus.REMOVED) {
+          await tx.clientMembership.update({
+            where: { id: existingMembership.id },
+            data: { status: MembershipStatus.PENDING_APPROVAL, requestedProjectId: requestedProject?.id ?? null },
+          });
+          registrationCreated = true;
+        } else if (
+          existingMembership.status === MembershipStatus.PENDING_APPROVAL
+          && requestedProject
+          && existingMembership.requestedProjectId !== requestedProject.id
+        ) {
+          await tx.clientMembership.update({
+            where: { id: existingMembership.id },
+            data: { requestedProjectId: requestedProject.id },
+          });
+          registrationCreated = true;
+        }
       }
+      if (!registrationCreated) return;
       await tx.auditLog.create({
         data: {
-          tenantId: tenant.id,
+          tenantId: tenant?.id ?? null,
           actorId: user.id,
           action: 'USER_REGISTERED',
           targetType: 'User',
           targetId: user.id,
-          scopeType: 'TENANT',
-          scopeId: tenant.id,
+          scopeType: tenant ? 'TENANT' : 'PLATFORM',
+          scopeId: tenant?.id ?? null,
           metadata: {
             source: 'SELF_REGISTRATION',
             requestedProjectId: requestedProject?.id ?? null,
@@ -120,8 +122,7 @@ export class AuthService {
         userId: user.id,
         userName,
         userEmail,
-        tenantId: tenant.id,
-        tenantName: tenant.name,
+        ...(tenant ? { tenantId: tenant.id, tenantName: tenant.name } : {}),
         ...(requestedProject ? {
           requestedProjectId: requestedProject.id,
           requestedProjectName: requestedProject.name,
@@ -133,9 +134,8 @@ export class AuthService {
     } catch (error) {
       // A resposta idempotente impede enumeração pública de e-mails existentes.
       if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')) throw error;
-      // A unique collision can mean another tenant created the same global
-      // identity concurrently. Retry after PostgreSQL resolves that writer so
-      // this tenant still receives its independent pending membership.
+      // A unique collision can mean another request created the same global
+      // identity concurrently. Retry after PostgreSQL resolves that writer.
       try {
         await persistRegistration();
       } catch (retryError) {

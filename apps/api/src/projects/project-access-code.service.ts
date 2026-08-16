@@ -12,6 +12,7 @@ const PROJECT_CODE_PATTERN = /^[A-HJ-NP-Z2-9]{12}$/;
 export type ProjectAccessCode = {
   code: string;
   expiresAt: string;
+  serverTime: string;
 };
 
 @Injectable()
@@ -21,15 +22,15 @@ export class ProjectAccessCodeService {
   current(projectId: string, now = new Date()): ProjectAccessCode {
     const bucket = Math.floor(now.getTime() / CODE_TTL_MS);
     const expiresAt = new Date((bucket + 1) * CODE_TTL_MS);
-    return { code: this.codeFor(projectId, bucket), expiresAt: expiresAt.toISOString() };
+    return { code: this.codeFor(projectId, bucket), expiresAt: expiresAt.toISOString(), serverTime: now.toISOString() };
   }
 
-  async resolveProject(tenantId: string, rawCode: string, now = new Date()) {
+  async resolveProject(rawCode: string, now = new Date()) {
     const code = rawCode.trim().toUpperCase();
     if (!PROJECT_CODE_PATTERN.test(code)) this.invalidCode();
     const projects = await this.prisma.project.findMany({
-      where: { tenantId, status: RecordStatus.ACTIVE },
-      select: { id: true, name: true },
+      where: { status: RecordStatus.ACTIVE, tenant: { status: RecordStatus.ACTIVE } },
+      select: { id: true, name: true, tenant: { select: { id: true, name: true } } },
     });
     const supplied = Buffer.from(code, 'ascii');
     const matches = projects.filter((project) => {

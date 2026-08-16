@@ -82,6 +82,14 @@ export class ClientMembershipsService {
       && (input.role === ClientRole.CLIENT_MEMBER || (input.status && input.status !== MembershipStatus.ACTIVE));
     const nextRole = input.role ?? existing.role;
     const nextStatus = input.status ?? existing.status;
+    const selectedProjectId = input.projectId !== undefined ? input.projectId : existing.requestedProjectId;
+    if (input.projectId) {
+      const selectedProject = await this.prisma.project.findFirst({
+        where: { id: input.projectId, tenantId, status: RecordStatus.ACTIVE },
+        select: { id: true },
+      });
+      if (!selectedProject) throw new NotFoundException('Projeto não encontrado.');
+    }
     return this.serializable(async (tx) => {
       await this.access.lockTenant(tx, tenantId);
       if (removesAdmin) {
@@ -92,19 +100,24 @@ export class ClientMembershipsService {
       }
       const membership = await tx.clientMembership.update({
         where: { id: existing.id },
-        data: { ...(input.role ? { role: input.role } : {}), ...(input.status ? { status: input.status } : {}) },
+        data: {
+          ...(input.role ? { role: input.role } : {}),
+          ...(input.status ? { status: input.status } : {}),
+          ...(input.projectId !== undefined ? { requestedProjectId: input.projectId } : {}),
+        },
       });
       if (nextStatus === MembershipStatus.ACTIVE) {
         await this.activateIdentity(tx, userId, tenantId, nextRole);
-        if (existing.requestedProjectId) {
+        if (selectedProjectId) {
           const requestedProject = await tx.project.findFirst({
-            where: { id: existing.requestedProjectId, tenantId, status: RecordStatus.ACTIVE },
+            where: { id: selectedProjectId, tenantId, status: RecordStatus.ACTIVE },
             select: { id: true },
           });
+          if (!requestedProject && input.projectId) throw new NotFoundException('Projeto não encontrado.');
           if (requestedProject) {
             await tx.projectMembership.upsert({
               where: { projectId_userId: { projectId: requestedProject.id, userId } },
-              update: { permission: 'VIEWER' },
+              update: {},
               create: { tenantId, projectId: requestedProject.id, userId, permission: 'VIEWER' },
             });
             await tx.clientMembership.update({
@@ -131,13 +144,20 @@ export class ClientMembershipsService {
       }
       const resolved = existing.status === MembershipStatus.PENDING_APPROVAL
         && (nextStatus === MembershipStatus.ACTIVE || nextStatus === MembershipStatus.REMOVED);
-      if (resolved) await this.notifications.resolveAccessRequest(tx, userId, tenantId);
+      if (resolved) {
+        await this.notifications.resolveAccessRequest(tx, userId, tenantId);
+        await this.notifications.resolveAccessRequest(tx, userId, null);
+      }
       await tx.auditLog.create({
         data: {
           actorId: actor.id, tenantId,
           action: resolved ? nextStatus === MembershipStatus.ACTIVE ? 'USER_ACCESS_APPROVED' : 'USER_ACCESS_REJECTED' : 'CLIENT_MEMBERSHIP_UPDATED',
           targetType: 'ClientMembership', targetId: membership.id, scopeType: 'TENANT', scopeId: tenantId,
-          metadata: { userId, previous: { role: existing.role, status: existing.status }, next: { role: nextRole, status: nextStatus } },
+          metadata: {
+            userId,
+            previous: { role: existing.role, status: existing.status, requestedProjectId: existing.requestedProjectId },
+            next: { role: nextRole, status: nextStatus, requestedProjectId: nextStatus === MembershipStatus.ACTIVE ? null : selectedProjectId },
+          },
         },
       });
       return membership;

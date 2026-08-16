@@ -60,6 +60,13 @@ da ordem de execução.
 | AUTH-014 | cookie de sessão | Secure, HttpOnly, SameSite e Path/Domain mínimos |
 | AUTH-015 | mutação por cookie sem token CSRF/com Origin inválida | rejeitada sem efeito |
 | AUTH-016 | ação sensível sem reautenticação recente | desafio adicional conforme política |
+| AUTH-017 | cadastro sem código de projeto | identidade global fica pendente, sem organização ou projeto implícitos; somente Super Admins são notificados |
+| AUTH-018 | cadastro com código atual de 12 caracteres | projeto solicitado fica pendente e só é vinculado após aprovação |
+| AUTH-019 | código inválido ou expirado | 400 estável; nenhum vínculo/identidade é criado ou alterado |
+| AUTH-020 | código consultado antes/depois do limite de 10 minutos | estável na janela; muda no limite; somente administradores do projeto visualizam |
+| AUTH-021 | login ativo sem projeto repetido/concorrente | login permitido; orientação visível; um alerta aberto por destinatário/organização |
+| AUTH-022 | projeto vinculado após alerta sem projeto | alerta é resolvido e o acesso passa a valer sem escalada de permissão |
+| AUTH-023 | Super Admin aprova cadastro sem código e escolhe organização | cria vínculo `CLIENT_MEMBER` ativo na organização escolhida, sem inferência por e-mail |
 
 ## 3. Matriz de isolamento e IDOR/BOLA
 
@@ -124,7 +131,7 @@ parametrizados a partir dela. Endpoint protegido sem policy é falha de release.
 |---|---|
 | Tenant | criar, duplicidade, suspender, reativar, paginação, estado inválido, auditoria |
 | Client membership | convite, aceite, expiração, reenvio, suspensão/remoção, múltiplos clientes independentes e último CLIENT_ADMIN |
-| Projeto | CRUD, validação de nome/limites, duplicidade definida, soft/hard delete |
+| Projeto | CRUD, validação de nome/limites, duplicidade definida, soft/hard delete, código rotativo e vínculo solicitado |
 | Usuário | adicionar existente/novo, duplicado, remover, desativado, último admin |
 | Movimentação | origem=destino, origem ausente, destino ausente, concorrência, rollback |
 | Permissão | grant/revoke, idempotência, herança (se houver), revogação imediata |

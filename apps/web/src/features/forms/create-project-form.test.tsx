@@ -52,6 +52,7 @@ describe('CreateProjectForm', () => {
       workspace: { id: workspaceId, name: 'Pesquisas 2026' },
       status: 'ACTIVE' as const,
       memberCount: 0,
+      createdAt: '2026-08-15T12:00:00.000Z',
       updatedAt: '2026-08-15T12:00:00.000Z',
     };
     render(

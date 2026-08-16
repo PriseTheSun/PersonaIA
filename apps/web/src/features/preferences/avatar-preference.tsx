@@ -7,19 +7,12 @@ import { Avatar } from '@/components/shared/avatar';
 import { MutationNotice } from '@/components/shared/inline-form';
 import { Button } from '@/components/ui/button';
 import { apiRequest, apiVoid, csrfHeaders } from '@/lib/api';
+import { AvatarCropDialog } from './avatar-crop-dialog';
+import { AvatarImageError, readAvatarImage } from './avatar-image';
 
 const avatarResponseSchema = z.object({ hasAvatar: z.literal(true), avatarUpdatedAt: z.string().datetime() });
 const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 const ACCEPTED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png']);
-
-function readAsDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('INVALID_FILE_RESULT'));
-    reader.onerror = () => reject(reader.error ?? new Error('FILE_READ_FAILED'));
-    reader.readAsDataURL(file);
-  });
-}
 
 export function AvatarPreference({
   name,
@@ -38,8 +31,9 @@ export function AvatarPreference({
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cropSource, setCropSource] = useState<string | null>(null);
 
-  const upload = async (event: ChangeEvent<HTMLInputElement>) => {
+  const selectPhoto = async (event: ChangeEvent<HTMLInputElement>) => {
     const input = event.currentTarget;
     const file = input.files?.[0];
     if (!file) return;
@@ -56,15 +50,28 @@ export function AvatarPreference({
     }
     setBusy(true);
     try {
-      const image = await readAsDataUrl(file);
-      await apiRequest('/preferences/avatar', avatarResponseSchema, { method: 'PUT', headers: csrfHeaders(), body: { image } });
-      await onChanged();
-      toast.success(t('preferences.photoUpdated'));
-    } catch {
-      setError(t('preferences.photoError'));
+      setCropSource(await readAvatarImage(file));
+    } catch (caught) {
+      setError(t(caught instanceof AvatarImageError && caught.code === 'IMAGE_DIMENSIONS' ? 'preferences.photoDimensionsTooLarge' : 'preferences.invalidPhoto'));
     } finally {
       setBusy(false);
       input.value = '';
+    }
+  };
+
+  const saveCroppedPhoto = async (image: string) => {
+    setError(null);
+    setBusy(true);
+    try {
+      await apiRequest('/preferences/avatar', avatarResponseSchema, { method: 'PUT', headers: csrfHeaders(), body: { image } });
+      await onChanged();
+      setCropSource(null);
+      toast.success(t('preferences.photoUpdated'));
+    } catch {
+      setError(t('preferences.photoError'));
+      throw new Error('AVATAR_UPLOAD_FAILED');
+    } finally {
+      setBusy(false);
     }
   };
 
@@ -100,13 +107,21 @@ export function AvatarPreference({
         </div>
       </div>
       <div className="mt-5"><MutationNotice message={error} type="error" /></div>
-      <input ref={inputRef} className="sr-only" type="file" accept="image/png,image/jpeg" onChange={(event) => { void upload(event); }} aria-label={t('preferences.choosePhoto')} />
+      <input ref={inputRef} className="sr-only" type="file" accept="image/png,image/jpeg" onChange={(event) => { void selectPhoto(event); }} aria-label={t('preferences.choosePhoto')} />
       <div className="mt-5 flex flex-col gap-2 sm:flex-row">
         <Button type="button" variant="outline" loading={busy} onClick={() => inputRef.current?.click()}>
           <Upload aria-hidden="true" />{t(hasAvatar ? 'preferences.changePhoto' : 'preferences.choosePhoto')}
         </Button>
         {hasAvatar ? <Button type="button" variant="ghost" disabled={busy} onClick={() => { void remove(); }}><Trash2 aria-hidden="true" />{t('preferences.removePhoto')}</Button> : null}
       </div>
+      <AvatarCropDialog
+        source={cropSource}
+        busy={busy}
+        error={error}
+        onOpenChange={(open) => { if (!open) { setCropSource(null); setError(null); } }}
+        onSave={saveCroppedPhoto}
+        onCropError={() => setError(t('preferences.cropPhotoError'))}
+      />
     </section>
   );
 }

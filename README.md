@@ -1,6 +1,6 @@
 # PersonaIA
 
-Plataforma multi-tenant para administrar clientes, workspaces, projetos, identidades, permissões funcionais, personas e questionários destinados a pesquisas.
+Plataforma multi-tenant para administrar organizações, workspaces, projetos, identidades, permissões funcionais, personas e questionários destinados a pesquisas.
 
 ## Stack
 
@@ -12,14 +12,16 @@ Plataforma multi-tenant para administrar clientes, workspaces, projetos, identid
 ## Modelo de acesso
 
 - `SUPER_ADMIN`: autoridade global da plataforma.
-- `CLIENT_ADMIN`: papel no vínculo entre uma identidade e um cliente.
+- `CLIENT_ADMIN`: papel no vínculo entre uma identidade e uma organização.
 - `WORKSPACE_ADMIN` e `WORKSPACE_MEMBER`: papéis independentes em cada workspace.
 - `PERSONA`, `RESEARCH`, `SIMULATION` e `DASHBOARD`: funcionalidades controladas por `READ`, `WRITE` ou `ADMIN`.
 - Permissões padrão do workspace são herdadas pelos projetos; override de projeto substitui a herança e `DENY` explícito sempre prevalece.
 
-Uma identidade pode estar vinculada a vários clientes e workspaces sem duplicação. O cliente/workspace informado pelo navegador é somente um seletor: o backend recarrega vínculos e permissões ativos em cada requisição. FKs compostas no PostgreSQL impedem associações cross-tenant; projetos não podem mudar de workspace; auditoria, histórico de associações e snapshots são append-only.
+Uma identidade pode estar vinculada a várias organizações e workspaces sem duplicação. A organização/workspace informada pelo navegador é somente um seletor: o backend recarrega vínculos e permissões ativos em cada requisição. FKs compostas no PostgreSQL impedem associações cross-tenant; projetos não podem mudar de organização; auditoria, histórico de associações e snapshots são append-only.
 
-Personas e questionários existem uma vez no cliente e são associados a vários workspaces por referência. Projetos que utilizam esses ativos preservam um snapshot histórico independente.
+Cada projeto possui um código de cadastro de 12 caracteres que é renovado automaticamente a cada 10 minutos. O código é opcional e identifica simultaneamente o projeto e sua organização, sem exigir um segundo código no formulário. Com código, a conta e o vínculo continuam pendentes até a aprovação. Sem código, a identidade fica na fila global para o Super Admin definir a organização; depois disso, ela também pode ser vinculada manualmente a um projeto. Quando alguém entra sem projeto, a interface orienta a espera e os administradores responsáveis recebem uma notificação deduplicada.
+
+Personas e questionários existem uma vez na organização e são associados a vários workspaces por referência. Projetos que utilizam esses ativos preservam um snapshot histórico independente.
 
 ## Executar com Docker
 

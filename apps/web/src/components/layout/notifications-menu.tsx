@@ -72,6 +72,7 @@ export function NotificationsMenu() {
     }
     const next = new URLSearchParams({ status: notification.resolvedAt ? 'ALL' : 'PENDING' });
     if (notification.tenantId) next.set('tenant', notification.tenantId);
+    else next.set('view', 'PLATFORM');
     navigate(`/access-control?${next.toString()}`);
     await refresh();
   };
@@ -128,7 +129,7 @@ export function NotificationsMenu() {
                 ? t('notifications.accessRequestedTitle')
                 : missingProject ? t('notifications.missingProjectTitle') : t('notifications.newActivity');
               const description = accessRequest
-                ? t(requestedProjectName ? 'notifications.accessRequestedForProjectDescription' : 'notifications.accessRequestedDescription', {
+                ? t(!notification.tenantId ? 'notifications.globalAccessRequestedDescription' : requestedProjectName ? 'notifications.accessRequestedForProjectDescription' : 'notifications.accessRequestedDescription', {
                     userName: payloadText(notification, 'userName'),
                     userEmail: payloadText(notification, 'userEmail'),
                     tenantName: payloadText(notification, 'tenantName'),

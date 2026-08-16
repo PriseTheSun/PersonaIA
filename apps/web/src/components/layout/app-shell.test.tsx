@@ -120,6 +120,36 @@ describe('AppShell', () => {
     expect(screen.getByText('Pessoa Teste (pessoa@teste.dev) solicitou acesso a Cliente Teste.')).toBeVisible();
   });
 
+  it('guides an approved member who still has no project assignment', () => {
+    render(
+      <I18nProvider>
+        <MemoryRouter>
+          <AuthContext.Provider value={{
+            status: 'authenticated',
+            user: {
+              id: 'user-2', name: 'Pessoa Teste', email: 'pessoa@teste.dev', role: 'PROJECT_USER', status: 'ACTIVE',
+              contexts: [{
+                tenantId: 'tenant-1', tenantName: 'Organização Teste', clientRole: 'CLIENT_MEMBER', status: 'ACTIVE',
+                hasProjectAccess: false, workspaces: [],
+              }],
+            },
+            activeContext: {
+              tenantId: 'tenant-1', tenantName: 'Organização Teste', clientRole: 'CLIENT_MEMBER', status: 'ACTIVE',
+              hasProjectAccess: false, workspaces: [],
+            },
+            effectiveRole: 'WORKSPACE_MEMBER',
+            login: vi.fn(), logout: vi.fn(), refresh: vi.fn(),
+          }}>
+            <Routes><Route element={<AppShell />}><Route index element={<div>Projetos</div>} /></Route></Routes>
+          </AuthContext.Provider>
+        </MemoryRouter>
+      </I18nProvider>,
+    );
+
+    expect(screen.getByRole('status')).toHaveTextContent('Seu acesso à organização está ativo');
+    expect(screen.getByRole('status')).toHaveTextContent('os administradores já foram avisados');
+  });
+
   it('opens the complete sidebar as an off-canvas menu on mobile', async () => {
     vi.mocked(window.matchMedia).mockImplementation((query: string) => ({
       matches: query === '(max-width: 767px)',

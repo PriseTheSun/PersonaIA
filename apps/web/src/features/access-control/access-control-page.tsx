@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { z } from 'zod';
 import { Avatar } from '@/components/shared/avatar';
 import { DataRegion } from '@/components/shared/data-region';
+import { FormDialog } from '@/components/shared/form-dialog';
 import { InlineForm, MutationNotice } from '@/components/shared/inline-form';
 import { PageHeader } from '@/components/shared/page-header';
 import { ScopeSelector } from '@/components/shared/scope-selector';
@@ -20,11 +21,13 @@ import { useAuth } from '@/features/auth/auth-store';
 import { useActiveScope } from '@/hooks/use-active-scope';
 import { useApiQuery } from '@/hooks/use-api-query';
 import { ApiError, apiRequest, csrfHeaders } from '@/lib/api';
-import { clientMembershipSchema, paginatedSchema, platformIdentitySchema, type ClientMembership, type ClientRole, type MembershipStatus, type PlatformIdentity } from '@/lib/schemas';
+import { clientMembershipSchema, paginatedSchema, platformIdentitySchema, projectSchema, tenantSchema, type ClientMembership, type ClientRole, type MembershipStatus, type PlatformIdentity, type Project, type Tenant } from '@/lib/schemas';
 import { formatDate } from '@/lib/utils';
 
 const responseSchema = z.union([z.array(clientMembershipSchema), paginatedSchema(clientMembershipSchema)]).transform((value) => Array.isArray(value) ? value : value.items);
 const platformResponseSchema = z.union([z.array(platformIdentitySchema), paginatedSchema(platformIdentitySchema)]).transform((value) => Array.isArray(value) ? value : value.items);
+const projectsResponseSchema = z.union([z.array(projectSchema), paginatedSchema(projectSchema)]).transform((value) => Array.isArray(value) ? value : value.items);
+const tenantsResponseSchema = z.union([z.array(tenantSchema), paginatedSchema(tenantSchema)]).transform((value) => Array.isArray(value) ? value : value.items);
 const filters = ['ALL', 'PENDING', 'ACTIVE', 'SUSPENDED', 'REMOVED'] as const;
 type Filter = typeof filters[number];
 type EditableStatus = Extract<MembershipStatus, 'ACTIVE' | 'SUSPENDED' | 'REMOVED'>;
@@ -45,13 +48,14 @@ export function AccessControlPage() {
   const auth = useAuth();
   const { tenantId } = useActiveScope();
   const isSuperAdmin = auth.status === 'authenticated' && auth.user.role === 'SUPER_ADMIN';
-  const [view, setView] = useState<AccessView>('CLIENT');
-  const [search, setSearch] = useState('');
   const [searchParams, setSearchParams] = useSearchParams();
+  const [view, setView] = useState<AccessView>(() => isSuperAdmin && searchParams.get('view') === 'PLATFORM' ? 'PLATFORM' : 'CLIENT');
+  const [search, setSearch] = useState('');
   const requestedFilter = searchParams.get('status');
   const initialFilter = filters.includes(requestedFilter as Filter) ? requestedFilter as Filter : 'PENDING';
   const [filter, setFilter] = useState<Filter>(initialFilter);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [approvalId, setApprovalId] = useState<string | null>(null);
   const [mutatingId, setMutatingId] = useState<string | null>(null);
   const [editingPlatformId, setEditingPlatformId] = useState<string | null>(null);
   const [mutatingPlatformId, setMutatingPlatformId] = useState<string | null>(null);
@@ -61,6 +65,12 @@ export function AccessControlPage() {
   const platformQuery = useApiQuery((signal) => isSuperAdmin && view === 'PLATFORM'
     ? apiRequest('/user-access', platformResponseSchema, { signal })
     : Promise.resolve([]), [isSuperAdmin, view]);
+  const projectsQuery = useApiQuery((signal) => tenantId && view === 'CLIENT'
+    ? apiRequest(`/projects?tenantId=${encodeURIComponent(tenantId)}`, projectsResponseSchema, { signal })
+    : Promise.resolve([]), [tenantId, view]);
+  const tenantsQuery = useApiQuery((signal) => isSuperAdmin && view === 'PLATFORM'
+    ? apiRequest('/tenants', tenantsResponseSchema, { signal })
+    : Promise.resolve([]), [isSuperAdmin, view]);
   const allItems = useMemo(() => query.status === 'success' ? query.data : [], [query]);
   const counts = useMemo(() => Object.fromEntries(filters.map((item) => [item, allItems.filter((membership) => matchesFilter(membership.status, item)).length])) as Record<Filter, number>, [allItems]);
   const items = useMemo(() => allItems.filter((membership) => {
@@ -68,6 +78,7 @@ export function AccessControlPage() {
     return matchesFilter(membership.status, filter) && text.includes(search.trim().toLocaleLowerCase(i18n.language));
   }), [allItems, filter, i18n.language, search]);
   const editingMembership = allItems.find((membership) => membership.userId === editingId);
+  const approvalMembership = allItems.find((membership) => membership.userId === approvalId);
   const platformItems = platformQuery.status === 'success' ? platformQuery.data : [];
   const editingPlatformIdentity = platformItems.find((identity) => identity.id === editingPlatformId);
 
@@ -83,7 +94,7 @@ export function AccessControlPage() {
     setSearchParams(nextParams, { replace: true });
   };
 
-  const updateMembership = async (membership: ClientMembership, input: { status?: EditableStatus; role?: ClientRole }) => {
+  const updateMembership = async (membership: ClientMembership, input: { status?: EditableStatus; role?: ClientRole; projectId?: string | null }) => {
     if (!tenantId) return;
     setMutatingId(membership.userId);
     try {
@@ -96,6 +107,7 @@ export function AccessControlPage() {
           ? t('accessControl.rejected')
           : t('accessControl.updated'));
       setEditingId(null);
+      setApprovalId(null);
       query.retry();
     } catch (cause) {
       toast.error(cause instanceof ApiError ? cause.message : t('forms.error'));
@@ -138,9 +150,35 @@ export function AccessControlPage() {
           />
         </InlineForm>
       ) : null}
+      {view === 'CLIENT' && approvalMembership ? (
+        <FormDialog
+          open
+          onOpenChange={(open) => { if (!open) setApprovalId(null); }}
+          title={t('accessControl.approveTitle', { name: approvalMembership.user.name })}
+          description={t('accessControl.approveDescription')}
+        >
+          <AccessApprovalForm
+            membership={approvalMembership}
+            projects={projectsQuery.status === 'success' ? projectsQuery.data : []}
+            projectsStatus={projectsQuery.status}
+            onRetryProjects={projectsQuery.retry}
+            loading={mutatingId === approvalMembership.userId}
+            onCancel={() => setApprovalId(null)}
+            onApprove={(projectId) => void updateMembership(approvalMembership, { status: 'ACTIVE', projectId })}
+          />
+        </FormDialog>
+      ) : null}
       {view === 'PLATFORM' && editingPlatformIdentity ? (
         <InlineForm title={t('accessControl.editPlatformTitle', { name: editingPlatformIdentity.name })} description={t('accessControl.editPlatformDescription')} onClose={() => setEditingPlatformId(null)}>
-          <PlatformAccessEditor identity={editingPlatformIdentity} loading={mutatingPlatformId === editingPlatformIdentity.id} onCancel={() => setEditingPlatformId(null)} onSave={(input) => void updatePlatformIdentity(editingPlatformIdentity, input)} />
+          <PlatformAccessEditor
+            identity={editingPlatformIdentity}
+            tenants={tenantsQuery.status === 'success' ? tenantsQuery.data : []}
+            tenantsStatus={tenantsQuery.status}
+            onRetryTenants={tenantsQuery.retry}
+            loading={mutatingPlatformId === editingPlatformIdentity.id}
+            onCancel={() => setEditingPlatformId(null)}
+            onSave={(input) => void updatePlatformIdentity(editingPlatformIdentity, input)}
+          />
         </InlineForm>
       ) : null}
       {view === 'PLATFORM' ? (
@@ -192,7 +230,7 @@ export function AccessControlPage() {
                           <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                             {isPending(membership.status) && canManage ? (
                               <>
-                                <Button size="sm" onClick={() => void updateMembership(membership, { status: 'ACTIVE' })} loading={mutatingId === membership.userId}><CheckCircle2 />{t('accessControl.approve')}</Button>
+                                <Button size="sm" onClick={() => setApprovalId(membership.userId)} loading={mutatingId === membership.userId}><CheckCircle2 />{t('accessControl.approve')}</Button>
                                 <Button size="sm" variant="outline" onClick={() => void updateMembership(membership, { status: 'REMOVED' })} disabled={mutatingId === membership.userId}><CircleX />{t('accessControl.reject')}</Button>
                               </>
                             ) : null}
@@ -202,7 +240,7 @@ export function AccessControlPage() {
                                 <DropdownMenuItem onSelect={() => setEditingId(membership.userId)}><UserRoundCog />{t('accessControl.editAccess')}</DropdownMenuItem>
                                 <DropdownMenuSeparator />
                                 {membership.status !== 'ACTIVE'
-                                  ? <DropdownMenuItem onSelect={() => void updateMembership(membership, { status: 'ACTIVE' })}><RotateCcw />{isPending(membership.status) ? t('accessControl.approve') : t('accessControl.activate')}</DropdownMenuItem>
+                                  ? <DropdownMenuItem onSelect={() => isPending(membership.status) ? setApprovalId(membership.userId) : void updateMembership(membership, { status: 'ACTIVE' })}><RotateCcw />{isPending(membership.status) ? t('accessControl.approve') : t('accessControl.activate')}</DropdownMenuItem>
                                   : <DropdownMenuItem className="text-destructive" onSelect={() => void updateMembership(membership, { status: 'SUSPENDED' })}><Ban />{t('accessControl.deactivate')}</DropdownMenuItem>}
                                 {isPending(membership.status) ? <DropdownMenuItem className="text-destructive" onSelect={() => void updateMembership(membership, { status: 'REMOVED' })}><CircleX />{t('accessControl.reject')}</DropdownMenuItem> : null}
                               </DropdownMenuContent>
@@ -215,6 +253,29 @@ export function AccessControlPage() {
                 )}
       </DataRegion>}
     </div>
+  );
+}
+
+function AccessApprovalForm({ membership, projects, projectsStatus, onRetryProjects, loading, onCancel, onApprove }: { membership: ClientMembership; projects: Project[]; projectsStatus: 'loading' | 'success' | 'error'; onRetryProjects: () => void; loading: boolean; onCancel: () => void; onApprove: (projectId: string | null) => void }) {
+  const { t } = useTranslation();
+  const activeProjects = projects.filter((project) => project.status === 'ACTIVE');
+  const [projectId, setProjectId] = useState(membership.requestedProject?.status === 'ACTIVE' ? membership.requestedProject.id : '');
+  return (
+    <form onSubmit={(event) => { event.preventDefault(); onApprove(projectId || null); }} className="space-y-5">
+      <div className="space-y-2">
+        <Label htmlFor="approval-project">{t('accessControl.projectAssignment')}</Label>
+        <select id="approval-project" className="h-11 w-full rounded-md border border-input bg-card px-3 text-base disabled:cursor-not-allowed disabled:opacity-60 md:text-sm" value={projectId} onChange={(event) => setProjectId(event.target.value)} disabled={projectsStatus !== 'success'}>
+          <option value="">{projectsStatus === 'loading' ? t('common.loading') : t('accessControl.noProjectAssignment')}</option>
+          {activeProjects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+        </select>
+        {projectsStatus === 'error' ? <Button type="button" variant="outline" size="sm" onClick={onRetryProjects}>{t('common.retry')}</Button> : null}
+        <p className="text-xs leading-5 text-muted-foreground">{t('accessControl.projectAssignmentHint')}</p>
+      </div>
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <Button type="button" variant="outline" onClick={onCancel}>{t('common.cancel')}</Button>
+        <Button type="submit" loading={loading} disabled={projectsStatus !== 'success'}><CheckCircle2 />{t('accessControl.approveAndContinue')}</Button>
+      </div>
+    </form>
   );
 }
 
@@ -240,12 +301,16 @@ function PlatformIdentityList({ items, status, currentUserId, mutatingId, onRetr
   );
 }
 
-function PlatformAccessEditor({ identity, loading, onCancel, onSave }: { identity: PlatformIdentity; loading: boolean; onCancel: () => void; onSave: (input: { status: 'ACTIVE' | 'SUSPENDED' | 'ARCHIVED'; role: 'SUPER_ADMIN' | 'PROJECT_USER'; tenantId?: string | null }) => void }) {
+function PlatformAccessEditor({ identity, tenants, tenantsStatus, onRetryTenants, loading, onCancel, onSave }: { identity: PlatformIdentity; tenants: Tenant[]; tenantsStatus: 'loading' | 'success' | 'error'; onRetryTenants: () => void; loading: boolean; onCancel: () => void; onSave: (input: { status: 'ACTIVE' | 'SUSPENDED' | 'ARCHIVED'; role: 'SUPER_ADMIN' | 'PROJECT_USER'; tenantId?: string | null }) => void }) {
   const { t } = useTranslation();
   const [status, setStatus] = useState<'ACTIVE' | 'SUSPENDED' | 'ARCHIVED'>(identity.status === 'SUSPENDED' ? 'SUSPENDED' : identity.status === 'REMOVED' || identity.status === 'ARCHIVED' ? 'ARCHIVED' : 'ACTIVE');
   const [role, setRole] = useState<'SUPER_ADMIN' | 'PROJECT_USER'>(identity.role === 'SUPER_ADMIN' ? 'SUPER_ADMIN' : 'PROJECT_USER');
   const activeMemberships = identity.clientMemberships.filter((membership) => membership.status === 'ACTIVE');
-  const [tenantId, setTenantId] = useState(identity.tenantId ?? activeMemberships[0]?.tenantId ?? '');
+  const pendingMemberships = identity.clientMemberships.filter((membership) => isPending(membership.status));
+  const availableTenants = isPending(identity.status) && pendingMemberships.length === 0
+    ? tenants.filter((tenant) => tenant.status === 'ACTIVE').map((tenant) => ({ id: tenant.id, name: tenant.name, role: null }))
+    : [...activeMemberships, ...pendingMemberships].map((membership) => ({ id: membership.tenantId, name: membership.tenant.name, role: membership.role }));
+  const [tenantId, setTenantId] = useState(identity.tenantId ?? activeMemberships[0]?.tenantId ?? pendingMemberships[0]?.tenantId ?? '');
   const [error, setError] = useState<string | null>(null);
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -260,9 +325,9 @@ function PlatformAccessEditor({ identity, loading, onCancel, onSave }: { identit
         <div className="space-y-2"><Label htmlFor="platform-status">{t('common.status')}</Label><select id="platform-status" className="h-10 w-full rounded-md border border-input bg-card px-3 text-base md:text-sm" value={status} onChange={(event) => setStatus(event.target.value as typeof status)}><option value="ACTIVE">{t('common.active')}</option><option value="SUSPENDED">{t('common.suspended')}</option><option value="ARCHIVED">{t('common.removed')}</option></select></div>
         <div className="space-y-2"><Label htmlFor="platform-role">{t('accessControl.globalRole')}</Label><select id="platform-role" className="h-10 w-full rounded-md border border-input bg-card px-3 text-base md:text-sm" value={role} onChange={(event) => setRole(event.target.value as typeof role)}><option value="PROJECT_USER">{t('accessControl.standardIdentity')}</option><option value="SUPER_ADMIN">{t('roles.SUPER_ADMIN')}</option></select></div>
       </div>
-      {role !== 'SUPER_ADMIN' ? <div className="space-y-2"><Label htmlFor="platform-tenant">{t('accessControl.defaultClient')}</Label><select id="platform-tenant" className="h-10 w-full rounded-md border border-input bg-card px-3 text-base md:text-sm" value={tenantId} onChange={(event) => setTenantId(event.target.value)}><option value="">{t('forms.selectTenant')}</option>{activeMemberships.map((membership) => <option key={membership.tenantId} value={membership.tenantId}>{membership.tenant.name} · {t(`roles.${membership.role}`)}</option>)}</select></div> : null}
+      {role !== 'SUPER_ADMIN' ? <div className="space-y-2"><Label htmlFor="platform-tenant">{t('accessControl.defaultClient')}</Label><select id="platform-tenant" className="h-11 w-full rounded-md border border-input bg-card px-3 text-base disabled:cursor-not-allowed disabled:opacity-60 md:text-sm" value={tenantId} onChange={(event) => setTenantId(event.target.value)} disabled={tenantsStatus !== 'success'}><option value="">{tenantsStatus === 'loading' ? t('common.loading') : t('forms.selectTenant')}</option>{availableTenants.map((tenant) => <option key={tenant.id} value={tenant.id}>{tenant.name}{tenant.role ? ` · ${t(`roles.${tenant.role}`)}` : ''}</option>)}</select>{tenantsStatus === 'error' ? <Button type="button" variant="outline" size="sm" onClick={onRetryTenants}>{t('common.retry')}</Button> : null}</div> : null}
       <div className="flex gap-2 rounded-md border border-secondary/25 bg-muted p-3 text-sm leading-6 text-foreground"><ShieldCheck className="mt-1 size-4 shrink-0" aria-hidden="true" /><p>{t('accessControl.platformSecurityWarning')}</p></div>
-      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button type="button" variant="outline" onClick={onCancel}>{t('common.cancel')}</Button><Button type="submit" loading={loading}>{t('common.save')}</Button></div>
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button type="button" variant="outline" onClick={onCancel}>{t('common.cancel')}</Button><Button type="submit" loading={loading} disabled={role !== 'SUPER_ADMIN' && tenantsStatus !== 'success'}>{t('common.save')}</Button></div>
     </form>
   );
 }

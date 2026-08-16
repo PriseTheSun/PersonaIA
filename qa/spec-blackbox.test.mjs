@@ -148,6 +148,13 @@ function records(response) {
   return [];
 }
 
+async function currentProjectCode(projectId, session) {
+  const response = await request('GET', `/projects/${projectId}/access-code`, { session });
+  assert.equal(response.status, 200, `código do projeto indisponível (${response.status})`);
+  assert.match(response.json?.code ?? '', /^[A-HJ-NP-Z2-9]{12}$/, 'código do projeto inválido');
+  return response.json.code;
+}
+
 function renderProbe(probe) {
   return {
     ...probe,
@@ -395,13 +402,14 @@ test('CY-15: autocadastro de identidade existente exige senha correta sem enumer
     'credentials.clientAdminB',
     'credentials.existingIdentityNotInB',
     'ids.tenantB',
-    'tenantSlugs.tenantB'
+    'ids.projectB1'
   )) return;
   const account = credentials.existingIdentityNotInB;
   assert.ok(account.wrongPassword, 'fixture exige wrongPassword forte e diferente');
   assert.notEqual(account.password, account.wrongPassword, 'wrongPassword não pode ser a senha correta');
   if (!allowedOrigin) assert.fail('origin permitido não configurado');
   const adminSession = await login('clientAdminB');
+  const projectCode = await currentProjectCode(ids.projectB1, adminSession);
   assert.ok(adminSession.csrfToken && adminSession.cookie, 'login do admin sem cookies CSRF');
   const originalSession = await authenticate(account, 'identidade existente antes do teste');
   const me = await request('GET', '/auth/me', { session: originalSession });
@@ -421,7 +429,7 @@ test('CY-15: autocadastro de identidade existente exige senha correta sem enumer
   const publicPayload = {
     name: 'QA Existing Identity',
     email: account.email,
-    tenantSlug: config.tenantSlugs.tenantB
+    projectCode
   };
   const wrong = await request('POST', '/auth/register', {
     body: { ...publicPayload, password: account.wrongPassword }
@@ -597,8 +605,8 @@ test('CY-18: notificações e aprovação da mesma identidade são isoladas por 
     'credentials.clientAdminB',
     'ids.tenantA',
     'ids.tenantB',
-    'tenantSlugs.tenantA',
-    'tenantSlugs.tenantB'
+    'ids.projectA1',
+    'ids.projectB1'
   )) return;
   if (!allowedOrigin) assert.fail('origin permitido não configurado');
   const [superSession, adminA, adminB] = await Promise.all([
@@ -606,14 +614,18 @@ test('CY-18: notificações e aprovação da mesma identidade são isoladas por 
   ]);
   assert.ok(adminA.csrfToken && adminA.cookie, 'login do admin A sem cookies CSRF');
   assert.ok(adminB.csrfToken && adminB.cookie, 'login do admin B sem cookies CSRF');
+  const [projectCodeA, projectCodeB] = await Promise.all([
+    currentProjectCode(ids.projectA1, adminA),
+    currentProjectCode(ids.projectB1, adminB)
+  ]);
   const marker = Date.now();
   const email = `qa-notification-${marker}@example.test`;
   const password = 'QA-Notification-Pass-9!';
   const payload = { name: 'QA Notification Identity', email, password };
 
   const [registerA, registerB] = await Promise.all([
-    request('POST', '/auth/register', { body: { ...payload, tenantSlug: config.tenantSlugs.tenantA } }),
-    request('POST', '/auth/register', { body: { ...payload, tenantSlug: config.tenantSlugs.tenantB } })
+    request('POST', '/auth/register', { body: { ...payload, projectCode: projectCodeA } }),
+    request('POST', '/auth/register', { body: { ...payload, projectCode: projectCodeB } })
   ]);
   assert.ok([200, 201, 202].includes(registerA.status), `cadastro A falhou (${registerA.status})`);
   assert.equal(registerB.status, registerA.status, `cadastros públicos divergiram (${registerB.status})`);
@@ -1000,11 +1012,12 @@ test('CY-28: novo pedido após rejeição cria outro ciclo e notificação não 
     'credentials.superAdmin',
     'credentials.clientAdminA',
     'ids.tenantA',
-    'tenantSlugs.tenantA'
+    'ids.projectA1'
   )) return;
   const [superSession, adminSession] = await Promise.all([
     login('superAdmin'), login('clientAdminA')
   ]);
+  const projectCode = await currentProjectCode(ids.projectA1, adminSession);
   if (registrationCooldownMs) {
     await new Promise((resolve) => setTimeout(resolve, registrationCooldownMs));
   }
@@ -1013,7 +1026,7 @@ test('CY-28: novo pedido após rejeição cria outro ciclo e notificação não 
     name: 'QA Repeat Request',
     email: `qa-repeat-${marker}@example.test`,
     password: 'QA-Repeat-Request-2026!',
-    tenantSlug: config.tenantSlugs.tenantA
+    projectCode
   };
   const firstRequest = await request('POST', '/auth/register', { body: account });
   assert.ok([200, 201, 202].includes(firstRequest.status), `primeiro pedido falhou (${firstRequest.status})`);
@@ -1068,11 +1081,12 @@ test('CY-29: autocadastro não reativa identidade global SUSPENDED ou REMOVED', 
     'credentials.suspendedIdentity',
     'credentials.removedIdentity',
     'ids.tenantB',
-    'tenantSlugs.tenantB'
+    'ids.projectB1'
   )) return;
   const [superSession, adminSession] = await Promise.all([
     login('superAdmin'), login('clientAdminB')
   ]);
+  const projectCode = await currentProjectCode(ids.projectB1, adminSession);
   for (const key of ['suspendedIdentity', 'removedIdentity']) {
     const identity = credentials[key];
     const response = await request('POST', '/auth/register', {
@@ -1080,7 +1094,7 @@ test('CY-29: autocadastro não reativa identidade global SUSPENDED ou REMOVED', 
         name: `QA ${key}`,
         email: identity.email,
         password: identity.password,
-        tenantSlug: config.tenantSlugs.tenantB
+        projectCode
       }
     });
     assert.ok([200, 201, 202].includes(response.status), `${key}: resposta pública inválida (${response.status})`);
@@ -1108,17 +1122,18 @@ test('RN-05/CY-30: ex-CLIENT_ADMIN não conserva notificações do tenant revoga
     'credentials.clientAdminA2',
     'ids.tenantA',
     'ids.clientAdminA2',
-    'tenantSlugs.tenantA'
+    'ids.projectA1'
   )) return;
   const [managerSession, revokedSession] = await Promise.all([
     login('clientAdminA'), login('clientAdminA2')
   ]);
+  const projectCode = await currentProjectCode(ids.projectA1, managerSession);
   const marker = Date.now();
   const pendingAccount = {
     name: 'QA Notification Revocation',
     email: `qa-notification-revoke-${marker}@example.test`,
     password: 'QA-Notification-Revoke-2026!',
-    tenantSlug: config.tenantSlugs.tenantA
+    projectCode
   };
   const registration = await request('POST', '/auth/register', { body: pendingAccount });
   assert.ok(

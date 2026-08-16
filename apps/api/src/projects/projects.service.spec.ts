@@ -69,4 +69,27 @@ describe('ProjectsService tenant isolation', () => {
     await expect(service.update(foreignProject, { workspaceId: foreignWorkspace }, actor)).rejects.toBeInstanceOf(NotFoundException);
     expect(prisma.$transaction).not.toHaveBeenCalled();
   });
+
+  it('shows the rotating registration code only on projects the actor may administer', async () => {
+    const project = {
+      id: foreignProject, tenantId: ownTenant, workspaceId: null, name: 'Pesquisa', slug: 'pesquisa',
+      status: 'ACTIVE', createdAt: new Date(), updatedAt: new Date(), workspace: null, _count: { memberships: 0 },
+    };
+    const prisma = {
+      project: { findMany: jest.fn().mockResolvedValue([project]) },
+      clientMembership: {
+        count: jest.fn().mockResolvedValue(1),
+        findMany: jest.fn().mockResolvedValue([{ tenantId: ownTenant }]),
+      },
+      workspaceMembership: { findMany: jest.fn().mockResolvedValue([]) },
+      projectMembership: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const access = { isSuper: jest.fn().mockReturnValue(false), requireTenant: jest.fn().mockResolvedValue({ id: ownTenant }) };
+    const codes = { current: jest.fn().mockReturnValue({ code: 'ABCDEFGHJKLM', expiresAt: '2026-08-15T20:10:00.000Z', serverTime: '2026-08-15T20:01:00.000Z' }) };
+    const service = new ProjectsService(prisma as never, access as never, codes as never);
+
+    await expect(service.list(actor, { tenantId: ownTenant })).resolves.toEqual([
+      expect.objectContaining({ id: foreignProject, accessCode: { code: 'ABCDEFGHJKLM', expiresAt: '2026-08-15T20:10:00.000Z', serverTime: '2026-08-15T20:01:00.000Z' } }),
+    ]);
+  });
 });

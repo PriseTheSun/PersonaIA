@@ -31,6 +31,40 @@ describe('AuthService refresh reuse detection', () => {
 });
 
 describe('AuthService account approval', () => {
+  it('creates a global pending identity when registration has no project code', async () => {
+    const tx = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({ id: '30000000-0000-4000-8000-000000000003' }),
+      },
+      clientMembership: { findUnique: jest.fn(), create: jest.fn() },
+      auditLog: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      user: { findUnique: jest.fn().mockResolvedValue(null) },
+      $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx)),
+    };
+    const notifications = { dispatchAccessRequest: jest.fn().mockResolvedValue(undefined) };
+    const projectCodes = { resolveProject: jest.fn() };
+    const service = new AuthService(prisma as never, {} as never, {} as never, notifications as never, projectCodes as never);
+
+    await expect(service.register({
+      name: 'Pessoa Teste', email: 'pessoa@teste.dev', password: 'UmaSenha#MuitoForte2026',
+    })).resolves.toEqual({ status: 'PENDING' });
+
+    expect(projectCodes.resolveProject).not.toHaveBeenCalled();
+    expect(tx.user.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ tenantId: null, role: 'PROJECT_USER', status: 'PENDING_APPROVAL' }),
+    }));
+    expect(tx.clientMembership.findUnique).not.toHaveBeenCalled();
+    expect(tx.clientMembership.create).not.toHaveBeenCalled();
+    expect(notifications.dispatchAccessRequest).toHaveBeenCalledWith(tx, {
+      userId: '30000000-0000-4000-8000-000000000003',
+      userName: 'Pessoa Teste',
+      userEmail: 'pessoa@teste.dev',
+    });
+  });
+
   it('creates self-registrations as pending project users and audits the request', async () => {
     const tx = {
       user: {
@@ -49,12 +83,15 @@ describe('AuthService account approval', () => {
       $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx))
     };
     const notifications = { dispatchAccessRequest: jest.fn().mockResolvedValue(undefined) };
-    const requestedProject = { id: '20000000-0000-4000-8000-000000000002', name: 'Pesquisa nacional' };
+    const requestedProject = {
+      id: '20000000-0000-4000-8000-000000000002', name: 'Pesquisa nacional',
+      tenant: { id: '10000000-0000-4000-8000-000000000001', name: 'Cliente Teste' },
+    };
     const projectCodes = { resolveProject: jest.fn().mockResolvedValue(requestedProject) };
     const service = new AuthService(prisma as never, {} as never, {} as never, notifications as never, projectCodes as never);
 
     await expect(service.register({
-      name: 'Pessoa Teste', email: 'Pessoa@Teste.dev', password: 'UmaSenha#MuitoForte2026', tenantSlug: 'cliente-teste', projectCode: 'ABCD2345EFGH'
+      name: 'Pessoa Teste', email: 'Pessoa@Teste.dev', password: 'UmaSenha#MuitoForte2026', projectCode: 'ABCD2345EFGH'
     })).resolves.toEqual({ status: 'PENDING' });
     expect(tx.user.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ email: 'pessoa@teste.dev', role: 'PROJECT_USER', status: 'PENDING_APPROVAL' })
@@ -63,6 +100,7 @@ describe('AuthService account approval', () => {
       data: expect.objectContaining({ requestedProjectId: requestedProject.id, status: 'PENDING_APPROVAL' }),
     }));
     expect(tx.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'USER_REGISTERED' }) }));
+    expect(projectCodes.resolveProject).toHaveBeenCalledWith('ABCD2345EFGH');
     expect(notifications.dispatchAccessRequest).toHaveBeenCalledWith(tx, {
       userId: '30000000-0000-4000-8000-000000000003',
       userName: 'Pessoa Teste',
@@ -92,6 +130,47 @@ describe('AuthService account approval', () => {
       expect(error).toBeInstanceOf(ForbiddenException);
       expect((error as ForbiddenException).getResponse()).toEqual(expect.objectContaining({ code: 'ACCOUNT_PENDING' }));
     }
+  });
+
+  it('notifies organization and platform admins when an approved user signs in without project access', async () => {
+    const password = 'UmaSenha#MuitoForte2026';
+    const passwordHash = await argon2.hash(password, { type: argon2.argon2id });
+    const tenantId = '10000000-0000-4000-8000-000000000001';
+    const user = {
+      id: '30000000-0000-4000-8000-000000000003', tenantId, name: 'Pessoa Teste', email: 'pessoa@teste.dev',
+      passwordHash, role: 'PROJECT_USER', status: 'ACTIVE', tokenVersion: 0,
+      clientMemberships: [{ tenantId, role: 'CLIENT_MEMBER', status: 'ACTIVE' }],
+    };
+    const prisma = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue(user),
+        update: jest.fn().mockResolvedValue(user),
+      },
+      tenant: { findUnique: jest.fn().mockResolvedValue({ name: 'Cliente Teste' }) },
+      projectMembership: { count: jest.fn().mockResolvedValue(0) },
+      projectFunctionalPermission: { count: jest.fn().mockResolvedValue(0) },
+      project: { count: jest.fn().mockResolvedValue(0) },
+      refreshSession: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const jwt = { signAsync: jest.fn().mockResolvedValue('token') };
+    const configValues: Record<string, string | number> = {
+      JWT_ACCESS_SECRET: 'access-secret-that-is-long-enough-for-tests',
+      JWT_REFRESH_SECRET: 'refresh-secret-that-is-long-enough-for-tests',
+      JWT_ISSUER: 'personaia-api', JWT_AUDIENCE: 'personaia-web', JWT_ACCESS_TTL: '15m', SESSION_TTL_MINUTES: 120,
+    };
+    const config = { getOrThrow: jest.fn((key: string) => configValues[key]) };
+    const notifications = { dispatchMissingProjectAccess: jest.fn().mockResolvedValue(undefined) };
+    const service = new AuthService(prisma as never, jwt as never, config as never, notifications as never, {} as never);
+
+    await service.login({ email: user.email, password, rememberMe: false }, {});
+
+    expect(notifications.dispatchMissingProjectAccess).toHaveBeenCalledWith({
+      userId: user.id,
+      userName: user.name,
+      userEmail: user.email,
+      tenantId,
+      tenantName: 'Cliente Teste',
+    });
   });
 });
 

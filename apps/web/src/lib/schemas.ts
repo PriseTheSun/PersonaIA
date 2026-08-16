@@ -134,7 +134,9 @@ export const projectSchema = z.object({
   accessCode: z.object({
     code: z.string().length(12),
     expiresAt: z.string().datetime(),
+    serverTime: z.string().datetime(),
   }).optional(),
+  createdAt: z.string(),
   updatedAt: z.string(),
 });
 export type Project = z.infer<typeof projectSchema>;
@@ -302,7 +304,6 @@ export type LoginInput = z.infer<typeof loginSchema>;
 export const registerSchema = z.object({
   name: z.string().trim().min(2, 'forms.validation.name').max(120),
   email: z.string().trim().email('validation.email').max(254),
-  tenantSlug: z.string().trim().toLowerCase().min(2, 'forms.validation.slug').max(80).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'forms.validation.slug'),
   projectCode: z.string().trim().toUpperCase().refine((value) => value === '' || /^[A-HJ-NP-Z2-9]{12}$/.test(value), 'registration.invalidProjectCodeFormat').optional(),
   password: strongPassword,
   confirmPassword: z.string().min(1, 'validation.required'),

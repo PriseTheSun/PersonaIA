@@ -1,7 +1,8 @@
-import { ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { ClientRole, MembershipStatus, Prisma, RecordStatus, Role } from '@prisma/client';
 import { redactUser } from '../common/security';
 import { Principal } from '../common/types/principal';
+import { NotificationsService } from '../notifications/notifications.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateUserAccessInput } from './users.schemas';
 
@@ -11,7 +12,10 @@ import { UpdateUserAccessInput } from './users.schemas';
  */
 @Injectable()
 export class UsersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly notifications?: NotificationsService,
+  ) {}
 
   async listAccess(actor: Principal) {
     this.requireSuper(actor);
@@ -48,16 +52,7 @@ export class UsersService {
     let nextTenantId = input.tenantId !== undefined ? input.tenantId : existing.tenantId;
     if (nextRole === Role.SUPER_ADMIN) {
       nextTenantId = null;
-    } else {
-      if (!nextTenantId) throw new ConflictException('Selecione uma organização para o contexto padrão.');
-      const membership = await this.prisma.clientMembership.findUnique({
-        where: { tenantId_userId: { tenantId: nextTenantId, userId: id } },
-      });
-      if (!membership || membership.status !== MembershipStatus.ACTIVE) {
-        throw new ConflictException('Crie ou ative o vínculo do usuário com a organização antes de alterar seu contexto padrão.');
-      }
-      nextRole = membership.role === ClientRole.CLIENT_ADMIN ? Role.CLIENT_ADMIN : Role.PROJECT_USER;
-    }
+    } else if (!nextTenantId) throw new ConflictException('Selecione uma organização para o contexto padrão.');
 
     const deactivatesSuper = existing.role === Role.SUPER_ADMIN && existing.status === RecordStatus.ACTIVE
       && (nextRole !== Role.SUPER_ADMIN || nextStatus !== RecordStatus.ACTIVE);
@@ -67,6 +62,47 @@ export class UsersService {
         const activeSupers = await tx.user.count({ where: { role: Role.SUPER_ADMIN, status: RecordStatus.ACTIVE } });
         if (activeSupers <= 1) throw new ConflictException('Mantenha pelo menos um superadministrador ativo.');
       }
+      if (nextRole !== Role.SUPER_ADMIN && nextTenantId) {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${nextTenantId}, 0))`;
+        const tenant = await tx.tenant.findFirst({ where: { id: nextTenantId, status: RecordStatus.ACTIVE }, select: { id: true } });
+        if (!tenant) throw new NotFoundException('Organização não encontrada.');
+        let membership = await tx.clientMembership.findUnique({
+          where: { tenantId_userId: { tenantId: nextTenantId, userId: id } },
+        });
+        if (!membership || membership.status !== MembershipStatus.ACTIVE) {
+          const approvable = new Set<RecordStatus>([
+            RecordStatus.PENDING, RecordStatus.PENDING_APPROVAL, RecordStatus.INVITED,
+          ]).has(existing.status) && nextStatus === RecordStatus.ACTIVE;
+          if (!approvable) {
+            throw new ConflictException('Crie ou ative o vínculo do usuário com a organização antes de alterar seu contexto padrão.');
+          }
+          membership = membership
+            ? await tx.clientMembership.update({ where: { id: membership.id }, data: { status: MembershipStatus.ACTIVE } })
+            : await tx.clientMembership.create({
+                data: { tenantId: nextTenantId, userId: id, role: ClientRole.CLIENT_MEMBER, status: MembershipStatus.ACTIVE },
+              });
+          if (membership.requestedProjectId) {
+            const requestedProject = await tx.project.findFirst({
+              where: { id: membership.requestedProjectId, tenantId: nextTenantId, status: RecordStatus.ACTIVE },
+              select: { id: true },
+            });
+            if (requestedProject) {
+              await tx.projectMembership.upsert({
+                where: { projectId_userId: { projectId: requestedProject.id, userId: id } },
+                update: {},
+                create: { tenantId: nextTenantId, projectId: requestedProject.id, userId: id, permission: 'VIEWER' },
+              });
+              await this.notifications?.resolveMissingProjectAccess(tx, id, nextTenantId);
+            }
+            await tx.clientMembership.update({ where: { id: membership.id }, data: { requestedProjectId: null } });
+          }
+          await this.notifications?.resolveAccessRequest(tx, id, nextTenantId);
+        }
+        nextRole = membership.role === ClientRole.CLIENT_ADMIN ? Role.CLIENT_ADMIN : Role.PROJECT_USER;
+      }
+      const resolvesGlobalRequest = existing.status === RecordStatus.PENDING_APPROVAL
+        && (nextStatus === RecordStatus.ACTIVE || nextStatus === RecordStatus.REMOVED);
+      if (resolvesGlobalRequest) await this.notifications?.resolveAccessRequest(tx, id, null);
       const accessChanged = nextRole !== existing.role || nextStatus !== existing.status || nextTenantId !== existing.tenantId;
       const updated = await tx.user.update({
         where: { id },

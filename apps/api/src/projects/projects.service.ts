@@ -64,21 +64,42 @@ export class ProjectsService {
       },
       orderBy: { createdAt: 'desc' },
     });
-    const codeTenantIds = this.projectCodes && !this.accessControl().isSuper(actor)
-      ? new Set((await this.prisma.clientMembership.findMany({
-          where: {
-            userId: actor.id,
-            tenantId: { in: [...new Set(projects.map(({ tenantId }) => tenantId))] },
-            role: ClientRole.CLIENT_ADMIN,
-            status: MembershipStatus.ACTIVE,
-          },
+    let codeProjectIds: Set<string> | null = null;
+    if (this.projectCodes && !this.accessControl().isSuper(actor)) {
+      const tenantIds = [...new Set(projects.map(({ tenantId }) => tenantId))];
+      const projectIds = projects.map(({ id }) => id);
+      const workspaceIds = projects.flatMap(({ workspaceId }) => workspaceId ? [workspaceId] : []);
+      const [clientAdmins, workspaceAdmins, projectAdmins] = await Promise.all([
+        this.prisma.clientMembership.findMany({
+          where: { userId: actor.id, tenantId: { in: tenantIds }, role: ClientRole.CLIENT_ADMIN, status: MembershipStatus.ACTIVE },
           select: { tenantId: true },
-        })).map(({ tenantId }) => tenantId))
-      : null;
+        }),
+        this.prisma.workspaceMembership.findMany({
+          where: {
+            userId: actor.id, workspaceId: { in: workspaceIds }, role: 'WORKSPACE_ADMIN', status: MembershipStatus.ACTIVE,
+            clientMembership: { status: MembershipStatus.ACTIVE },
+          },
+          select: { workspaceId: true },
+        }),
+        this.prisma.projectMembership.findMany({
+          where: {
+            userId: actor.id, projectId: { in: projectIds }, permission: { in: ['OWNER', 'MANAGER'] },
+            clientMembership: { status: MembershipStatus.ACTIVE },
+          },
+          select: { projectId: true },
+        }),
+      ]);
+      const adminTenantIds = new Set(clientAdmins.map(({ tenantId }) => tenantId));
+      const adminWorkspaceIds = new Set(workspaceAdmins.map(({ workspaceId }) => workspaceId));
+      codeProjectIds = new Set([
+        ...projectAdmins.map(({ projectId }) => projectId),
+        ...projects.filter(({ tenantId, workspaceId }) => adminTenantIds.has(tenantId) || (workspaceId && adminWorkspaceIds.has(workspaceId))).map(({ id }) => id),
+      ]);
+    }
     return projects.map(({ _count, ...project }) => ({
       ...project,
       memberCount: _count.memberships,
-      ...(this.projectCodes && (this.accessControl().isSuper(actor) || codeTenantIds?.has(project.tenantId))
+      ...(this.projectCodes && (this.accessControl().isSuper(actor) || codeProjectIds?.has(project.id))
         ? { accessCode: this.projectCodes.current(project.id) }
         : {}),
     }));

@@ -42,10 +42,6 @@
     },
     "pendingApproval": { "email": "qa-pending@example.test", "password": "REPLACE_ME" }
   },
-  "tenantSlugs": {
-    "tenantA": "qa-tenant-a",
-    "tenantB": "qa-tenant-b"
-  },
   "ids": {
     "tenantA": "00000000-0000-4000-8000-00000000000a",
     "tenantB": "00000000-0000-4000-8000-00000000000b",

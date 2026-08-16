@@ -11,31 +11,36 @@ const responseSchema = z.object({
   projectId: z.string(),
   code: z.string().length(12),
   expiresAt: z.string().datetime(),
+  serverTime: z.string().datetime(),
 });
 
-type AccessCode = Pick<z.infer<typeof responseSchema>, 'code' | 'expiresAt'>;
+type AccessCode = Pick<z.infer<typeof responseSchema>, 'code' | 'expiresAt' | 'serverTime'>;
 
 export function ProjectAccessCode({ projectId, initial }: { projectId: string; initial: AccessCode }) {
   const { t } = useTranslation();
   const [accessCode, setAccessCode] = useState(initial);
-  const [remainingSeconds, setRemainingSeconds] = useState(() => secondsUntil(initial.expiresAt));
+  const [serverOffsetMs, setServerOffsetMs] = useState(() => offsetFrom(initial.serverTime));
+  const [remainingSeconds, setRemainingSeconds] = useState(() => secondsUntil(initial.expiresAt, offsetFrom(initial.serverTime)));
   const [refreshing, setRefreshing] = useState(false);
   const [copied, setCopied] = useState(false);
   const refreshedExpiry = useRef<string | null>(null);
   const initialCode = initial.code;
   const initialExpiresAt = initial.expiresAt;
+  const initialServerTime = initial.serverTime;
 
   useEffect(() => {
-    setAccessCode({ code: initialCode, expiresAt: initialExpiresAt });
-    setRemainingSeconds(secondsUntil(initialExpiresAt));
-  }, [initialCode, initialExpiresAt]);
+    const nextOffset = offsetFrom(initialServerTime);
+    setAccessCode({ code: initialCode, expiresAt: initialExpiresAt, serverTime: initialServerTime });
+    setServerOffsetMs(nextOffset);
+    setRemainingSeconds(secondsUntil(initialExpiresAt, nextOffset));
+  }, [initialCode, initialExpiresAt, initialServerTime]);
 
   useEffect(() => {
-    const update = () => setRemainingSeconds(secondsUntil(accessCode.expiresAt));
+    const update = () => setRemainingSeconds(secondsUntil(accessCode.expiresAt, serverOffsetMs));
     update();
     const interval = window.setInterval(update, 1_000);
     return () => window.clearInterval(interval);
-  }, [accessCode.expiresAt]);
+  }, [accessCode.expiresAt, serverOffsetMs]);
 
   useEffect(() => {
     if (remainingSeconds > 0 || refreshing || refreshedExpiry.current === accessCode.expiresAt) return;
@@ -43,8 +48,10 @@ export function ProjectAccessCode({ projectId, initial }: { projectId: string; i
     setRefreshing(true);
     void apiRequest(`/projects/${encodeURIComponent(projectId)}/access-code`, responseSchema)
       .then((next) => {
-        setAccessCode({ code: next.code, expiresAt: next.expiresAt });
-        setRemainingSeconds(secondsUntil(next.expiresAt));
+        const nextOffset = offsetFrom(next.serverTime);
+        setAccessCode({ code: next.code, expiresAt: next.expiresAt, serverTime: next.serverTime });
+        setServerOffsetMs(nextOffset);
+        setRemainingSeconds(secondsUntil(next.expiresAt, nextOffset));
       })
       .catch(() => toast.error(t('projects.codeRefreshError')))
       .finally(() => setRefreshing(false));
@@ -65,7 +72,7 @@ export function ProjectAccessCode({ projectId, initial }: { projectId: string; i
   const seconds = (remainingSeconds % 60).toString().padStart(2, '0');
 
   return (
-    <div className="mt-3 inline-flex max-w-full items-center gap-2 rounded-md border bg-muted/40 px-2.5 py-1.5" aria-label={t('projects.accessCode')}>
+    <div className="inline-flex max-w-full items-center gap-2 rounded-md border bg-muted/40 px-2.5 py-1.5" aria-label={t('projects.accessCode')}>
       <KeyRound className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
       <code className="truncate font-mono text-xs font-semibold tracking-[0.12em] text-foreground">{accessCode.code}</code>
       <span className="whitespace-nowrap text-[11px] tabular-nums text-muted-foreground">
@@ -83,6 +90,10 @@ export function ProjectAccessCode({ projectId, initial }: { projectId: string; i
   );
 }
 
-function secondsUntil(expiresAt: string) {
-  return Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 1_000));
+function secondsUntil(expiresAt: string, serverOffsetMs: number) {
+  return Math.max(0, Math.ceil((new Date(expiresAt).getTime() - (Date.now() + serverOffsetMs)) / 1_000));
+}
+
+function offsetFrom(serverTime: string) {
+  return new Date(serverTime).getTime() - Date.now();
 }

@@ -1,4 +1,4 @@
-import { ArrowRight, FolderInput, FolderKanban, Plus, Users } from 'lucide-react';
+import { ArrowRight, FolderInput, MoreHorizontal, Plus } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
@@ -13,6 +13,8 @@ import { PageHeader } from '@/components/shared/page-header';
 import { SearchField } from '@/components/shared/search-field';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/features/auth/auth-store';
 import { CreateProjectForm } from '@/features/forms/create-project-form';
 import { ProjectWorkspaceForm } from '@/features/forms/project-workspace-form';
@@ -52,13 +54,43 @@ export function ProjectsPage() {
       {organizingProject && workspacesQuery.status === 'success' ? <FormDialog open onOpenChange={(open) => { if (!open) setOrganizingId(null); }} title={t('projects.organizeTitle', { name: organizingProject.name })} description={t('projects.organizeDescription')}><ProjectWorkspaceForm project={organizingProject} workspaces={workspacesQuery.data} onCancel={() => setOrganizingId(null)} onSaved={() => { setOrganizingId(null); toast.success(t('projects.organized')); query.retry(); workspacesQuery.retry(); }} /></FormDialog> : null}
       <DataRegion toolbar={<SearchField value={search} onChange={setSearch} placeholder={t('projects.search')} />}>
         {!tenantId ? <EmptyState title={t('context.selectClient')} description={t('context.selectClientDescription')} /> : query.status === 'loading' ? <LoadingRows /> : query.status === 'error' ? <ErrorState onRetry={query.retry} /> : items.length === 0 ? <EmptyState title={search ? t('common.noResults') : t('projects.empty')} description={t('projects.emptyDescription')} /> : (
-          <ul className="divide-y">{items.map((project) => (
-            <li key={project.id} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:px-5">
-              <span className="grid size-10 shrink-0 place-items-center rounded-md bg-secondary text-secondary-foreground"><FolderKanban className="size-5" aria-hidden="true" /></span>
-              <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h2 className="truncate text-sm font-semibold">{project.name}</h2><StatusBadge status={project.status} /></div><p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{project.description || t('projects.noDescription')}</p><p className="mt-1 text-xs text-muted-foreground">{project.workspace?.name ? t('projects.inWorkspace', { name: project.workspace.name }) : t('projects.withoutWorkspace')}</p>{project.accessCode ? <ProjectAccessCode projectId={project.id} initial={project.accessCode} /> : null}</div>
-              <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-end"><span className="flex items-center gap-1.5 text-xs text-muted-foreground"><Users className="size-3.5" aria-hidden="true" />{t('projects.memberCount', { count: project.memberCount })} · {formatDate(project.updatedAt, i18n.language)}</span>{isTenantLevelAdmin ? <Button type="button" variant="ghost" size="sm" onClick={() => setOrganizingId(project.id)}><FolderInput />{t('projects.organize')}</Button> : null}<Button asChild variant="ghost" size="sm"><Link to={`/permissions?tenant=${encodeURIComponent(tenantId)}&workspace=${encodeURIComponent(project.workspaceId ?? 'all')}&project=${encodeURIComponent(project.id)}`}>{t('projects.open')}<ArrowRight /></Link></Button></div>
-            </li>
-          ))}</ul>
+          <Table className="min-w-[880px]">
+            <TableHeader>
+              <TableRow>
+                <TableHead className="min-w-64">{t('projects.columns.name')}</TableHead>
+                <TableHead className="min-w-72">{t('projects.columns.code')}</TableHead>
+                <TableHead className="whitespace-nowrap text-center">{t('projects.columns.members')}</TableHead>
+                <TableHead className="whitespace-nowrap">{t('projects.columns.created')}</TableHead>
+                <TableHead className="w-20 text-right">{t('common.actions')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>{items.map((project) => (
+              <TableRow key={project.id}>
+                <TableCell>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="truncate font-medium">{project.name}</span>
+                    <StatusBadge status={project.status} />
+                  </div>
+                  <p className="mt-1 max-w-md truncate text-xs text-muted-foreground">{project.description || t('projects.noDescription')}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{project.workspace?.name ? t('projects.inWorkspace', { name: project.workspace.name }) : t('projects.withoutWorkspace')}</p>
+                </TableCell>
+                <TableCell>{project.accessCode ? <ProjectAccessCode projectId={project.id} initial={project.accessCode} /> : <span className="text-muted-foreground" aria-label={t('common.unknown')}>—</span>}</TableCell>
+                <TableCell className="text-center font-medium tabular-nums">{project.memberCount}</TableCell>
+                <TableCell className="whitespace-nowrap text-muted-foreground">{formatDate(project.createdAt, i18n.language)}</TableCell>
+                <TableCell className="text-right">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" aria-label={`${t('common.actions')}: ${project.name}`}><MoreHorizontal /></Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      {isTenantLevelAdmin ? <DropdownMenuItem onSelect={() => setOrganizingId(project.id)}><FolderInput />{t('projects.organize')}</DropdownMenuItem> : null}
+                      <DropdownMenuItem asChild><Link to={`/permissions?tenant=${encodeURIComponent(tenantId)}&workspace=${encodeURIComponent(project.workspaceId ?? 'all')}&project=${encodeURIComponent(project.id)}`}><ArrowRight />{t('projects.open')}</Link></DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </TableCell>
+              </TableRow>
+            ))}</TableBody>
+          </Table>
         )}
       </DataRegion>
     </div>

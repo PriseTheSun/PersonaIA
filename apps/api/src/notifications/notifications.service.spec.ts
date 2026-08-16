@@ -51,6 +51,34 @@ describe('NotificationsService', () => {
     });
   });
 
+  it('notifies only active super admins when registration has no organization', async () => {
+    const superAdmins = [{ id: '30000000-0000-4000-8000-000000000003' }];
+    const tx = {
+      user: { findMany: jest.fn().mockResolvedValue(superAdmins) },
+      clientMembership: { findMany: jest.fn() },
+      notification: { createMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    };
+    const service = new NotificationsService({} as never);
+
+    await service.dispatchAccessRequest(tx as never, {
+      userId: targetId,
+      userName: 'Pessoa Teste',
+      userEmail: 'pessoa@teste.dev',
+    });
+
+    expect(tx.clientMembership.findMany).not.toHaveBeenCalled();
+    expect(tx.notification.createMany).toHaveBeenCalledWith({
+      data: [{
+        recipientId: superAdmins[0]!.id,
+        tenantId: null,
+        type: 'ACCESS_REQUESTED',
+        targetId,
+        payload: { userName: 'Pessoa Teste', userEmail: 'pessoa@teste.dev' },
+      }],
+      skipDuplicates: true,
+    });
+  });
+
   it('always scopes lists and unread counts to the authenticated recipient', async () => {
     const prisma = {
       notification: {
@@ -70,6 +98,42 @@ describe('NotificationsService', () => {
     }));
     expect(prisma.notification.count).toHaveBeenCalledWith({
       where: { recipientId: actor.id, readAt: null }
+    });
+  });
+
+  it('creates a tenant-scoped, deduplicated warning when an active user signs in without a project', async () => {
+    const tx = {
+      user: { findMany: jest.fn().mockResolvedValue([{ id: '30000000-0000-4000-8000-000000000003' }]) },
+      clientMembership: { findMany: jest.fn().mockResolvedValue([{ userId: '40000000-0000-4000-8000-000000000004' }]) },
+      notification: { createMany: jest.fn().mockResolvedValue({ count: 2 }) },
+    };
+    const prisma = { $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx)) };
+    const service = new NotificationsService(prisma as never);
+
+    await service.dispatchMissingProjectAccess({
+      userId: targetId,
+      userName: 'Pessoa Teste',
+      userEmail: 'pessoa@teste.dev',
+      tenantId,
+      tenantName: 'Cliente Teste',
+    });
+
+    expect(tx.notification.createMany).toHaveBeenCalledWith({
+      data: [
+        '30000000-0000-4000-8000-000000000003',
+        '40000000-0000-4000-8000-000000000004',
+      ].map((recipientId) => ({
+        recipientId,
+        tenantId,
+        type: 'USER_LOGIN_WITHOUT_PROJECT',
+        targetId,
+        payload: {
+          userName: 'Pessoa Teste',
+          userEmail: 'pessoa@teste.dev',
+          tenantName: 'Cliente Teste',
+        },
+      })),
+      skipDuplicates: true,
     });
   });
 

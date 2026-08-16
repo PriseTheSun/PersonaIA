@@ -98,6 +98,18 @@ IDs UUID/ULID reduzem enumeração, mas não são um controle de autorização.
   do refresh token preserva o prazo original e nunca prolonga a sessão.
 - JWT: algoritmo em allowlist, validação de `iss`, `aud`, `exp`, `nbf` e chave;
   rejeitar `alg=none`, confusão de algoritmo e `kid` não confiável.
+- Códigos de cadastro de projeto possuem 12 caracteres sem símbolos ambíguos,
+  são derivados por HMAC com separação de domínio e renovados a cada 10 minutos;
+  o valor não é persistido em texto puro. A validação pesquisa somente projetos
+  de organizações ativas, usa comparação de tempo constante e permanece
+  protegida pelo rate limit da rota pública.
+- Um código válido registra apenas o projeto solicitado. O vínculo fica pendente
+  e nunca substitui a aprovação administrativa. Login sem projeto gera uma
+  notificação por destinatário/organização enquanto o alerta estiver aberto;
+  um índice parcial impede duplicação em logins concorrentes.
+- Sem código, o autocadastro não tenta inferir uma organização por domínio de
+  e-mail e não cria vínculo implícito. Apenas Super Admins recebem a solicitação
+  global e devem escolher explicitamente a organização antes da ativação.
 - Mensagens de login/recuperação não revelam se uma conta existe.
 - Rate limit distribuído por conta, IP e fluxo; atraso progressivo sem possibilitar
   bloqueio permanente provocado por terceiros.
