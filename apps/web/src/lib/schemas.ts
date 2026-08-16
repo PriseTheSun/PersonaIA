@@ -207,8 +207,34 @@ const assetBaseSchema = z.object({
 export const personaSchema = assetBaseSchema.extend({ kind: z.literal('PERSONA').optional() });
 export type Persona = z.infer<typeof personaSchema>;
 
-export const questionnaireSchema = assetBaseSchema.extend({ kind: z.literal('QUESTIONNAIRE').optional() });
+export const questionnaireSchema = assetBaseSchema.extend({
+  kind: z.literal('QUESTIONNAIRE').optional(),
+  questionCount: z.number().int().nonnegative().default(0),
+});
 export type Questionnaire = z.infer<typeof questionnaireSchema>;
+
+export const questionnaireQuestionTypeSchema = z.enum(['MULTIPLE_CHOICE', 'FREE_TEXT']);
+export type QuestionnaireQuestionType = z.infer<typeof questionnaireQuestionTypeSchema>;
+
+export const questionnaireOptionSchema = z.object({
+  id: z.string().uuid(),
+  label: z.string().min(1).max(300),
+  position: z.number().int().nonnegative(),
+});
+export type QuestionnaireOption = z.infer<typeof questionnaireOptionSchema>;
+
+export const questionnaireQuestionSchema = z.object({
+  id: z.string().uuid(),
+  tenantId: z.string().uuid(),
+  questionnaireId: z.string().uuid(),
+  prompt: z.string().min(1).max(1000),
+  type: questionnaireQuestionTypeSchema,
+  position: z.number().int().nonnegative(),
+  options: z.array(questionnaireOptionSchema).default([]),
+  createdAt: z.string().datetime().optional(),
+  updatedAt: z.string().datetime().optional(),
+});
+export type QuestionnaireQuestion = z.infer<typeof questionnaireQuestionSchema>;
 
 export const permissionSchema = z.enum(['VIEWER', 'CONTRIBUTOR', 'MANAGER', 'OWNER']);
 export type Permission = z.infer<typeof permissionSchema>;

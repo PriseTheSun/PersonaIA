@@ -6,7 +6,7 @@ import {
 import { AccessControlService } from '../common/access-control.service';
 import { Principal } from '../common/types/principal';
 import { PrismaService } from '../prisma/prisma.service';
-import { AssetQuery, CreateAssetInput, UpdateAssetInput } from './assets.schemas';
+import { AssetQuery, CreateAssetInput, QuestionnaireQuestionInput, UpdateAssetInput } from './assets.schemas';
 
 type Kind = 'PERSONA' | 'QUESTIONNAIRE';
 
@@ -74,6 +74,7 @@ export class AssetsService {
           where: { disassociatedAt: null, ...(workspaceIds ? { workspaceId: { in: workspaceIds } } : {}) },
           select: { workspaceId: true },
         },
+        _count: { select: { questions: true } },
       },
       orderBy: { createdAt: 'desc' },
     }), this.prisma.projectQuestionnaireUsage.groupBy({
@@ -83,8 +84,9 @@ export class AssetsService {
       }, _count: true,
     })]);
     const usageCounts = new Map(usage.map((item) => [item.questionnaireId, item._count]));
-    return items.map(({ workspaces, ...item }) => ({
-      ...item, workspaceIds: workspaces.map(({ workspaceId }) => workspaceId), activeProjectUsageCount: usageCounts.get(item.id) ?? 0,
+    return items.map(({ workspaces, _count, ...item }) => ({
+      ...item, workspaceIds: workspaces.map(({ workspaceId }) => workspaceId), questionCount: _count.questions,
+      activeProjectUsageCount: usageCounts.get(item.id) ?? 0,
     }));
   }
 
@@ -152,6 +154,95 @@ export class AssetsService {
       });
       return asset;
     });
+  }
+
+  async listQuestions(tenantId: string, questionnaireId: string, actor: Principal) {
+    await this.get('QUESTIONNAIRE', tenantId, questionnaireId, actor);
+    return this.prisma.questionnaireQuestion.findMany({
+      where: { tenantId, questionnaireId },
+      include: { options: { orderBy: { position: 'asc' } } },
+      orderBy: { position: 'asc' },
+    });
+  }
+
+  async createQuestion(tenantId: string, questionnaireId: string, input: QuestionnaireQuestionInput, actor: Principal) {
+    await this.requireAssetWrite('QUESTIONNAIRE', tenantId, questionnaireId, actor);
+    return this.prisma.$transaction(async (tx) => {
+      await this.access.lockTenant(tx, tenantId);
+      await this.requireAssetTx(tx, 'QUESTIONNAIRE', tenantId, questionnaireId);
+      const aggregate = await tx.questionnaireQuestion.aggregate({ where: { tenantId, questionnaireId }, _max: { position: true } });
+      const question = await tx.questionnaireQuestion.create({
+        data: {
+          tenantId,
+          questionnaireId,
+          prompt: input.prompt,
+          type: input.type,
+          position: (aggregate._max.position ?? -1) + 1,
+          ...(input.type === 'MULTIPLE_CHOICE' ? {
+            options: { create: input.options.map((label, position) => ({ tenantId, label, position })) },
+          } : {}),
+        },
+        include: { options: { orderBy: { position: 'asc' } } },
+      });
+      await tx.questionnaire.update({ where: { id: questionnaireId }, data: { version: { increment: 1 } } });
+      await tx.auditLog.create({
+        data: {
+          actorId: actor.id, tenantId, action: 'QUESTIONNAIRE_QUESTION_CREATED', targetType: 'QuestionnaireQuestion', targetId: question.id,
+          scopeType: 'TENANT', scopeId: tenantId, metadata: { questionnaireId, type: input.type, position: question.position },
+        },
+      });
+      return question;
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
+  async updateQuestion(tenantId: string, questionnaireId: string, questionId: string, input: QuestionnaireQuestionInput, actor: Principal) {
+    await this.requireAssetWrite('QUESTIONNAIRE', tenantId, questionnaireId, actor);
+    return this.prisma.$transaction(async (tx) => {
+      await this.access.lockTenant(tx, tenantId);
+      await this.requireAssetTx(tx, 'QUESTIONNAIRE', tenantId, questionnaireId);
+      const existing = await tx.questionnaireQuestion.findFirst({ where: { id: questionId, tenantId, questionnaireId } });
+      if (!existing) throw new NotFoundException('Pergunta não encontrada.');
+      await tx.questionnaireOption.deleteMany({ where: { tenantId, questionId } });
+      await tx.questionnaireQuestion.update({
+        where: { id: questionId },
+        data: { prompt: input.prompt, type: input.type },
+      });
+      if (input.type === 'MULTIPLE_CHOICE') {
+        await tx.questionnaireOption.createMany({
+          data: input.options.map((label, position) => ({ tenantId, questionId, label, position })),
+        });
+      }
+      await tx.questionnaire.update({ where: { id: questionnaireId }, data: { version: { increment: 1 } } });
+      await tx.auditLog.create({
+        data: {
+          actorId: actor.id, tenantId, action: 'QUESTIONNAIRE_QUESTION_UPDATED', targetType: 'QuestionnaireQuestion', targetId: questionId,
+          scopeType: 'TENANT', scopeId: tenantId, metadata: { questionnaireId, previousType: existing.type, type: input.type },
+        },
+      });
+      return tx.questionnaireQuestion.findUniqueOrThrow({
+        where: { id: questionId },
+        include: { options: { orderBy: { position: 'asc' } } },
+      });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
+  async removeQuestion(tenantId: string, questionnaireId: string, questionId: string, actor: Principal) {
+    await this.requireAssetWrite('QUESTIONNAIRE', tenantId, questionnaireId, actor);
+    await this.prisma.$transaction(async (tx) => {
+      await this.access.lockTenant(tx, tenantId);
+      await this.requireAssetTx(tx, 'QUESTIONNAIRE', tenantId, questionnaireId);
+      const question = await tx.questionnaireQuestion.findFirst({ where: { id: questionId, tenantId, questionnaireId } });
+      if (!question) throw new NotFoundException('Pergunta não encontrada.');
+      await tx.questionnaireQuestion.delete({ where: { id: questionId } });
+      await tx.questionnaire.update({ where: { id: questionnaireId }, data: { version: { increment: 1 } } });
+      await tx.auditLog.create({
+        data: {
+          actorId: actor.id, tenantId, action: 'QUESTIONNAIRE_QUESTION_REMOVED', targetType: 'QuestionnaireQuestion', targetId: questionId,
+          scopeType: 'TENANT', scopeId: tenantId, metadata: { questionnaireId, type: question.type, position: question.position },
+        },
+      });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    return { success: true };
   }
 
   async remove(kind: Kind, tenantId: string, assetId: string, actor: Principal) {
@@ -293,15 +384,30 @@ export class AssetsService {
         where: { id: projectId, tenantId: project.tenantId, workspaceId: project.workspaceId, status: RecordStatus.ACTIVE },
       });
       if (!currentProject) throw new NotFoundException('Projeto não encontrado.');
-      const asset = kind === 'PERSONA'
+      const persona = kind === 'PERSONA'
         ? await tx.persona.findFirst({ where: { id: assetId, tenantId: project.tenantId, status: RecordStatus.ACTIVE } })
-        : await tx.questionnaire.findFirst({ where: { id: assetId, tenantId: project.tenantId, status: RecordStatus.ACTIVE } });
+        : null;
+      const questionnaire = kind === 'QUESTIONNAIRE'
+        ? await tx.questionnaire.findFirst({
+          where: { id: assetId, tenantId: project.tenantId, status: RecordStatus.ACTIVE },
+          include: { questions: { orderBy: { position: 'asc' }, include: { options: { orderBy: { position: 'asc' } } } } },
+        })
+        : null;
+      const asset = persona ?? questionnaire;
       if (!asset) throw new NotFoundException('Ativo não encontrado.');
       const associated = kind === 'PERSONA'
         ? await tx.workspacePersona.count({ where: { workspaceId: project.workspaceId, personaId: assetId, disassociatedAt: null } })
         : await tx.workspaceQuestionnaire.count({ where: { workspaceId: project.workspaceId, questionnaireId: assetId, disassociatedAt: null } });
       if (!associated) throw new ConflictException('O ativo não está associado ao workspace do projeto.');
-      const snapshot = { id: asset.id, name: asset.name, description: asset.description, data: asset.data, version: asset.version } as Prisma.InputJsonValue;
+      const snapshot = {
+        id: asset.id, name: asset.name, description: asset.description, data: asset.data, version: asset.version,
+        ...(questionnaire ? {
+          questions: questionnaire.questions.map((question) => ({
+            id: question.id, prompt: question.prompt, type: question.type, position: question.position,
+            options: question.options.map((option) => ({ id: option.id, label: option.label, position: option.position })),
+          })),
+        } : {}),
+      } as Prisma.InputJsonValue;
       const usage = kind === 'PERSONA'
         ? await tx.projectPersonaUsage.create({ data: { tenantId: project.tenantId, workspaceId: project.workspaceId, projectId, personaId: assetId, version: asset.version, snapshot } })
         : await tx.projectQuestionnaireUsage.create({ data: { tenantId: project.tenantId, workspaceId: project.workspaceId, projectId, questionnaireId: assetId, version: asset.version, snapshot } });

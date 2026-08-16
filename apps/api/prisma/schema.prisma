@@ -74,6 +74,11 @@ enum AssetType {
   QUESTIONNAIRE
 }
 
+enum QuestionnaireQuestionType {
+  MULTIPLE_CHOICE
+  FREE_TEXT
+}
+
 enum AssociationAction {
   ASSOCIATED
   DISASSOCIATED
@@ -312,11 +317,43 @@ model Questionnaire {
   version     Int                      @default(1)
   status      RecordStatus             @default(ACTIVE)
   workspaces  WorkspaceQuestionnaire[]
+  questions   QuestionnaireQuestion[]
   createdAt   DateTime                 @default(now())
   updatedAt   DateTime                 @updatedAt
 
   @@unique([id, tenantId])
   @@index([tenantId, status])
+}
+
+model QuestionnaireQuestion {
+  id              String                    @id @default(uuid()) @db.Uuid
+  tenantId        String                    @db.Uuid
+  questionnaireId String                    @db.Uuid
+  prompt          String                    @db.VarChar(1000)
+  type            QuestionnaireQuestionType
+  position        Int
+  questionnaire   Questionnaire             @relation(fields: [questionnaireId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  options         QuestionnaireOption[]
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
+
+  @@unique([id, tenantId])
+  @@unique([questionnaireId, position])
+  @@index([tenantId, questionnaireId])
+}
+
+model QuestionnaireOption {
+  id         String                @id @default(uuid()) @db.Uuid
+  tenantId   String                @db.Uuid
+  questionId String                @db.Uuid
+  label      String                @db.VarChar(300)
+  position   Int
+  question   QuestionnaireQuestion @relation(fields: [questionId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+
+  @@unique([questionId, position])
+  @@index([tenantId, questionId])
 }
 
 model WorkspacePersona {

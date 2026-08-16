@@ -83,7 +83,10 @@ test('i18n: vocabulário multicliente crítico está traduzido', () => {
     'permissions.allow',
     'permissions.deny',
     'permissions.inherit',
-    'permissions.projectOverride'
+    'permissions.projectOverride',
+    'preferences.title',
+    'preferences.profileTitle',
+    'preferences.passwordTitle'
   ];
   for (const locale of locales) {
     for (const key of requiredKeys) {

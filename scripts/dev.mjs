@@ -158,7 +158,7 @@ const application = spawn(
     '-c',
     'blue,green',
     'npm run start:dev -w @personaia/api',
-    'npm run dev -w @personaia/web',
+    'node scripts/wait-for-api.mjs && npm run dev -w @personaia/web',
   ],
   { cwd: projectRoot, env: developmentEnvironment, stdio: 'inherit' },
 );

@@ -59,7 +59,10 @@ describe('AppShell', () => {
     const user = userEvent.setup();
     renderShell();
     await user.click(screen.getByRole('button', { name: 'Conta' }));
-    expect(await screen.findByRole('link', { name: 'Preferências' })).toHaveAttribute('href', '/preferences');
+    expect((await screen.findByRole('menuitem', { name: 'Preferências' })).closest('a')).toHaveAttribute(
+      'href',
+      '/preferences',
+    );
   });
 
   it('shows the user classification as badges without the global platform label', () => {

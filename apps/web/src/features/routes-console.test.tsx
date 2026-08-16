@@ -33,7 +33,7 @@ const context = {
   workspaces: [{ id: 'workspace-1', name: 'Research', role: 'WORKSPACE_ADMIN' as const, status: 'ACTIVE' as const, permissions: [] }],
 };
 
-function renderAuthenticatedPage(Page: () => React.JSX.Element) {
+function renderAuthenticatedPage(Page: () => React.JSX.Element | null) {
   window.localStorage.setItem('personaia.locale', 'pt-BR');
   return render(
     <I18nProvider>

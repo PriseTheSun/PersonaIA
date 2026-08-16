@@ -50,7 +50,7 @@ describe('PreferencesPage', () => {
   });
 
   it('rejects unsupported image types before calling the API', async () => {
-    const user = userEvent.setup();
+    const user = userEvent.setup({ applyAccept: false });
     renderPage();
     await user.upload(screen.getByLabelText('Escolher foto'), new File(['<svg/>'], 'avatar.svg', { type: 'image/svg+xml' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Use uma imagem PNG ou JPEG.');
