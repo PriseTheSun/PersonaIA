@@ -16,11 +16,11 @@ export function ScopeSelector({ includeWorkspace = true }: { includeWorkspace?: 
   const auth = useAuth();
   const { tenantId, workspaceId, selectTenant, selectWorkspace } = useActiveScope();
   const isSuperAdmin = auth.status === 'authenticated' && auth.user.role === 'SUPER_ADMIN';
-  const canViewAllWorkspaces = isSuperAdmin || auth.effectiveRole === 'CLIENT_ADMIN';
+  const currentContext = auth.status === 'authenticated' ? auth.user.contexts?.find((context) => context.tenantId === tenantId) : undefined;
+  const canViewAllWorkspaces = isSuperAdmin || currentContext?.clientRole === 'CLIENT_ADMIN';
   const tenantsQuery = useApiQuery((signal) => isSuperAdmin
     ? apiRequest('/tenants', tenantsResponseSchema, { signal })
     : Promise.resolve((auth.status === 'authenticated' ? auth.user.contexts ?? [] : []).map((context) => tenantSchema.parse({ id: context.tenantId, name: context.tenantName, slug: context.tenantSlug ?? context.tenantId, createdAt: new Date(0).toISOString() }))), [isSuperAdmin, auth.status]);
-  const currentContext = auth.activeContext;
   const scopedWorkspaces = currentContext && currentContext.tenantId === tenantId ? currentContext.workspaces : [];
   const scopedWorkspaceKey = scopedWorkspaces.map((workspace) => `${workspace.id}:${workspace.status}`).join('|');
   const workspacesQuery = useApiQuery((signal) => tenantId && includeWorkspace

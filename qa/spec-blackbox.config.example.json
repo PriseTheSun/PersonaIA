@@ -2,6 +2,7 @@
   "baseUrl": "http://localhost:3001/api/v1",
   "origin": "http://localhost:5173",
   "loginIntervalMs": 12500,
+  "registrationCooldownMs": 10500,
   "credentials": {
     "superAdmin": { "email": "qa-super@example.test", "password": "REPLACE_ME" },
     "superAdmin2": { "email": "qa-super-2@example.test", "password": "REPLACE_ME" },
@@ -28,6 +29,11 @@
     "suspendedMembershipIdentity": {
       "id": "00000000-0000-4000-8000-0000000006a2",
       "email": "qa-suspended-membership@example.test"
+    },
+    "removedIdentity": {
+      "id": "00000000-0000-4000-8000-0000000006a4",
+      "email": "qa-removed@example.test",
+      "password": "REPLACE_ME"
     },
     "crossTenantGrantMember": {
       "id": "00000000-0000-4000-8000-0000000006a3",

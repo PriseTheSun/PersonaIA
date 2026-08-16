@@ -21,8 +21,15 @@ export function DashboardPage() {
   const auth = useAuth();
   const { tenantId, workspaceId } = useActiveScope();
   const [range, setRange] = useState<DashboardRange>('30d');
-  const effectiveRole = auth.status === 'authenticated' ? auth.effectiveRole ?? auth.user.role : null;
-  const activeWorkspace = auth.activeContext?.workspaces.find((workspace) => workspace.id === workspaceId);
+  const selectedContext = auth.status === 'authenticated' ? auth.user.contexts?.find((context) => context.tenantId === tenantId) ?? auth.activeContext : null;
+  const activeWorkspace = selectedContext?.workspaces.find((workspace) => workspace.id === workspaceId);
+  const effectiveRole = auth.status !== 'authenticated'
+    ? null
+    : auth.user.role === 'SUPER_ADMIN'
+      ? 'SUPER_ADMIN'
+      : selectedContext?.clientRole === 'CLIENT_ADMIN'
+        ? 'CLIENT_ADMIN'
+        : activeWorkspace?.role ?? auth.effectiveRole ?? auth.user.role;
   const dashboardPermission = activeWorkspace?.permissions.find((permission) => permission.feature === 'DASHBOARD');
   const isImplicitDashboardAdmin = effectiveRole !== null && ['SUPER_ADMIN', 'CLIENT_ADMIN', 'WORKSPACE_ADMIN'].includes(effectiveRole);
   const hasDashboardAccess = effectiveRole !== null && (isImplicitDashboardAdmin || dashboardPermission?.effect === 'ALLOW');

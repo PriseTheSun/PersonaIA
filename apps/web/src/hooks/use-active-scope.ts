@@ -10,7 +10,12 @@ export function useActiveScope() {
   const tenantId = params.get('tenant') ?? auth.activeScope?.tenantId ?? (auth.status === 'authenticated' ? auth.user.tenantId ?? undefined : undefined);
   const requestedWorkspace = params.get('workspace');
   const tenantWide = requestedWorkspace === 'all';
-  const workspaceId = tenantWide ? undefined : requestedWorkspace ?? (hasTenantParam ? undefined : auth.activeScope?.workspaceId);
+  const requestedContext = auth.status === 'authenticated' ? auth.user.contexts?.find((context) => context.tenantId === tenantId) : undefined;
+  const isSuperAdmin = auth.status === 'authenticated' && auth.user.role === 'SUPER_ADMIN';
+  const firstRequiredWorkspace = hasTenantParam && !requestedWorkspace && !isSuperAdmin && requestedContext?.clientRole !== 'CLIENT_ADMIN'
+    ? requestedContext?.workspaces.find((workspace) => workspace.status === 'ACTIVE')?.id
+    : undefined;
+  const workspaceId = tenantWide ? undefined : requestedWorkspace ?? firstRequiredWorkspace ?? (hasTenantParam ? undefined : auth.activeScope?.workspaceId);
 
   useEffect(() => {
     if (!tenantId) return;
@@ -23,10 +28,14 @@ export function useActiveScope() {
   const selectTenant = (nextTenantId: string) => {
     const next = new URLSearchParams(params);
     if (nextTenantId) next.set('tenant', nextTenantId); else next.delete('tenant');
-    if (['SUPER_ADMIN', 'CLIENT_ADMIN'].includes(auth.effectiveRole ?? '')) next.set('workspace', 'all');
+    const nextContext = auth.status === 'authenticated' ? auth.user.contexts?.find((context) => context.tenantId === nextTenantId) : undefined;
+    const canUseTenantScope = isSuperAdmin || nextContext?.clientRole === 'CLIENT_ADMIN';
+    const nextWorkspaceId = canUseTenantScope ? undefined : nextContext?.workspaces.find((workspace) => workspace.status === 'ACTIVE')?.id;
+    if (canUseTenantScope) next.set('workspace', 'all');
+    else if (nextWorkspaceId) next.set('workspace', nextWorkspaceId);
     else next.delete('workspace');
     setParams(next, { replace: true });
-    if (nextTenantId) auth.selectScope?.({ tenantId: nextTenantId });
+    if (nextTenantId) auth.selectScope?.({ tenantId: nextTenantId, ...(nextWorkspaceId ? { workspaceId: nextWorkspaceId } : {}) });
   };
 
   const selectWorkspace = (nextWorkspaceId: string) => {

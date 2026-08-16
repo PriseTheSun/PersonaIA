@@ -61,7 +61,7 @@ export class UsersService {
 
     const deactivatesSuper = existing.role === Role.SUPER_ADMIN && existing.status === RecordStatus.ACTIVE
       && (nextRole !== Role.SUPER_ADMIN || nextStatus !== RecordStatus.ACTIVE);
-    return this.prisma.$transaction(async (tx) => {
+    return this.serializable(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended('personaia:global-super-admins', 0))`;
       if (deactivatesSuper) {
         const activeSupers = await tx.user.count({ where: { role: Role.SUPER_ADMIN, status: RecordStatus.ACTIVE } });
@@ -88,10 +88,21 @@ export class UsersService {
         },
       });
       return redactUser(updated);
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    });
   }
 
   private requireSuper(actor: Principal) {
     if (actor.role !== Role.SUPER_ADMIN) throw new ForbiddenException('Acesso não permitido.');
+  }
+
+  private async serializable<T>(operation: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+    try {
+      return await this.prisma.$transaction(operation, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
+        throw new ConflictException('A operação conflitou com outra alteração. Recarregue os dados e tente novamente.');
+      }
+      throw error;
+    }
   }
 }

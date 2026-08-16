@@ -64,6 +64,7 @@ const userIds = {
   suspendedIdentity: '00000000-0000-4000-8000-0000000006a1',
   suspendedMembershipIdentity: '00000000-0000-4000-8000-0000000006a2',
   crossTenantGrantMember: '00000000-0000-4000-8000-0000000006a3',
+  removedIdentity: '00000000-0000-4000-8000-0000000006a4',
   pendingApproval: '00000000-0000-4000-8000-00000000060d',
   noAssetReadMemberA: '00000000-0000-4000-8000-00000000060e',
   limitedAssetReadMemberA: '00000000-0000-4000-8000-00000000060f',
@@ -95,6 +96,7 @@ const accounts = {
   suspendedIdentity: ['qa-suspended@example.test', 'QA Suspended Identity', 'PROJECT_USER', 'SUSPENDED', ids.tenantA],
   suspendedMembershipIdentity: ['qa-suspended-membership@example.test', 'QA Suspended Membership', 'PROJECT_USER', 'SUSPENDED', ids.tenantA],
   crossTenantGrantMember: ['qa-cross-grant@example.test', 'QA Cross Grant', 'PROJECT_USER', 'ACTIVE', ids.tenantA],
+  removedIdentity: ['qa-removed@example.test', 'QA Removed Identity', 'PROJECT_USER', 'REMOVED', ids.tenantA],
   pendingApproval: ['qa-pending@example.test', 'QA Pending', 'PROJECT_USER', 'PENDING_APPROVAL', ids.tenantA],
   noAssetReadMemberA: ['qa-no-asset-read-a@example.test', 'QA No Asset Read', 'PROJECT_USER', 'ACTIVE', ids.tenantA],
   limitedAssetReadMemberA: ['qa-limited-asset-read-a@example.test', 'QA Limited Asset Read', 'PROJECT_USER', 'ACTIVE', ids.tenantA],
@@ -142,6 +144,8 @@ try {
     { tenantId: ids.tenantA, userId: userIds.clientAdminA, role: 'CLIENT_ADMIN', status: 'ACTIVE' },
     { tenantId: ids.tenantA, userId: userIds.clientAdminA2, role: 'CLIENT_ADMIN', status: 'ACTIVE' },
     { tenantId: ids.tenantB, userId: userIds.clientAdminB, role: 'CLIENT_ADMIN', status: 'ACTIVE' },
+    { tenantId: ids.tenantB, userId: userIds.clientAdminA2, role: 'CLIENT_MEMBER', status: 'ACTIVE' },
+    { tenantId: ids.tenantB, userId: userIds.superAdmin2, role: 'CLIENT_MEMBER', status: 'ACTIVE' },
     ...['workspaceMemberA', 'revocableMemberA', 'denyMemberA', 'multiClientUser', 'existingIdentityNotInB', 'crossTenantGrantMember', 'noAssetReadMemberA', 'limitedAssetReadMemberA'].map((key) => ({
       tenantId: ids.tenantA, userId: userIds[key], role: 'CLIENT_MEMBER', status: 'ACTIVE',
     })),
@@ -164,9 +168,11 @@ try {
 
   await prisma.workspaceMembership.createMany({ data: [
     ...[userIds.clientAdminA, userIds.clientAdminA2].flatMap((userId) => [ids.workspaceA1, ids.workspaceA2].map((workspaceId) => ({
-      tenantId: ids.tenantA, workspaceId, userId, role: 'WORKSPACE_ADMIN', status: 'ACTIVE',
+      tenantId: ids.tenantA, workspaceId, userId, role: 'WORKSPACE_ADMIN', status: 'ACTIVE', inheritedFromClientAdmin: true,
     }))),
-    { tenantId: ids.tenantB, workspaceId: ids.workspaceB1, userId: userIds.clientAdminB, role: 'WORKSPACE_ADMIN', status: 'ACTIVE' },
+    { tenantId: ids.tenantB, workspaceId: ids.workspaceB1, userId: userIds.clientAdminB, role: 'WORKSPACE_ADMIN', status: 'ACTIVE', inheritedFromClientAdmin: true },
+    { tenantId: ids.tenantB, workspaceId: ids.workspaceB1, userId: userIds.clientAdminA2, role: 'WORKSPACE_MEMBER', status: 'ACTIVE' },
+    { tenantId: ids.tenantB, workspaceId: ids.workspaceB1, userId: userIds.superAdmin2, role: 'WORKSPACE_MEMBER', status: 'ACTIVE' },
     ...['workspaceMemberA', 'revocableMemberA', 'existingIdentityNotInB', 'crossTenantGrantMember', 'noAssetReadMemberA', 'limitedAssetReadMemberA'].map((key) => ({
       tenantId: ids.tenantA, workspaceId: ids.workspaceA1, userId: userIds[key], role: 'WORKSPACE_MEMBER', status: 'ACTIVE',
     })),

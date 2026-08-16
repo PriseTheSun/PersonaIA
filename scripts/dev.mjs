@@ -99,8 +99,25 @@ const occupiedPorts = (await Promise.all(applicationPorts.map(async (entry) => (
 })))).filter((entry) => entry.occupied);
 
 if (occupiedPorts.length > 0) {
+  const expectedServicesAreHealthy = occupiedPorts.length === applicationPorts.length
+    && (await Promise.all([
+      fetch('http://127.0.0.1:3001/api/v1/health', { signal: AbortSignal.timeout(1_500) })
+        .then((response) => response.ok)
+        .catch(() => false),
+      fetch('http://127.0.0.1:5173/', { signal: AbortSignal.timeout(1_500) })
+        .then((response) => response.ok)
+        .catch(() => false),
+    ])).every(Boolean);
+
+  if (expectedServicesAreHealthy) {
+    console.log('A aplicação já está em execução e saudável.');
+    console.log('Frontend: http://localhost:5173');
+    console.log('API: http://localhost:3001/api/v1/health');
+    process.exit(0);
+  }
+
   console.error(`A aplicação já parece estar em execução (${occupiedPorts.map(({ label, port }) => `${label} ${port}`).join(', ')}).`);
-  console.error('Abra http://localhost:5173. Para reiniciar, use Ctrl+C no terminal anterior antes de executar npm run dev novamente.');
+  console.error('Uma ou mais portas estão ocupadas por um processo sem saúde confirmada. Encerre o processo anterior e execute npm run dev novamente.');
   process.exit(1);
 }
 

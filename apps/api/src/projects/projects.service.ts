@@ -74,6 +74,7 @@ export class ProjectsService {
     });
     try {
       return await this.prisma.$transaction(async (tx) => {
+        await this.accessControl().lockTenant(tx, workspace.tenantId);
         await this.accessControl().lockWorkspace(tx, workspace.id);
         const activeWorkspace = await tx.workspace.count({
           where: { id: workspace.id, tenantId: workspace.tenantId, status: RecordStatus.ACTIVE, tenant: { status: RecordStatus.ACTIVE } },

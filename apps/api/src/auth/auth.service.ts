@@ -46,70 +46,79 @@ export class AuthService {
     const passwordHash = existingIdentity?.passwordHash ?? await argon2.hash(input.password, {
       type: argon2.argon2id, memoryCost: 65_536, timeCost: 3, parallelism: 1
     });
-    try {
-      await this.prisma.$transaction(async (tx) => {
-        let user = await tx.user.findUnique({ where: { email: userEmail } });
-        if (user) {
-          const ownsIdentity = await argon2.verify(user.passwordHash, input.password).catch(() => false);
-          if (!ownsIdentity) return;
-          if (!new Set<RecordStatus>([
-            RecordStatus.PENDING, RecordStatus.PENDING_APPROVAL, RecordStatus.INVITED, RecordStatus.ACTIVE,
-          ]).has(user.status)) return;
-        } else {
-          user = await tx.user.create({
-            data: {
-              tenantId: tenant.id,
-              name: userName,
-              email: userEmail,
-              passwordHash,
-              role: Role.PROJECT_USER,
-              status: RecordStatus.PENDING_APPROVAL,
-            },
-          });
-        }
-        const existingMembership = await tx.clientMembership.findUnique({
-          where: { tenantId_userId: { tenantId: tenant.id, userId: user.id } },
-        });
-        if (!existingMembership) {
-          await tx.clientMembership.create({
-            data: {
-              tenantId: tenant.id,
-              userId: user.id,
-              role: ClientRole.CLIENT_MEMBER,
-              status: MembershipStatus.PENDING_APPROVAL,
-            },
-          });
-        } else if (existingMembership.status === MembershipStatus.REMOVED) {
-          await tx.clientMembership.update({
-            where: { id: existingMembership.id },
-            data: { status: MembershipStatus.PENDING_APPROVAL },
-          });
-        } else {
-          return;
-        }
-        await tx.auditLog.create({
+    const persistRegistration = () => this.prisma.$transaction(async (tx) => {
+      let user = await tx.user.findUnique({ where: { email: userEmail } });
+      if (user) {
+        const ownsIdentity = await argon2.verify(user.passwordHash, input.password).catch(() => false);
+        if (!ownsIdentity) return;
+        if (!new Set<RecordStatus>([
+          RecordStatus.PENDING, RecordStatus.PENDING_APPROVAL, RecordStatus.INVITED, RecordStatus.ACTIVE,
+        ]).has(user.status)) return;
+      } else {
+        user = await tx.user.create({
           data: {
             tenantId: tenant.id,
-            actorId: user.id,
-            action: 'USER_REGISTERED',
-            targetType: 'User',
-            targetId: user.id,
-            scopeType: 'TENANT',
-            scopeId: tenant.id,
-            metadata: { source: 'SELF_REGISTRATION' }
-          }
+            name: userName,
+            email: userEmail,
+            passwordHash,
+            role: Role.PROJECT_USER,
+            status: RecordStatus.PENDING_APPROVAL,
+          },
         });
-        await this.notifications.dispatchAccessRequest(tx, {
-          userId: user.id,
-          userName,
-          userEmail,
-          tenantId: tenant.id,
-          tenantName: tenant.name,
-        });
+      }
+      const existingMembership = await tx.clientMembership.findUnique({
+        where: { tenantId_userId: { tenantId: tenant.id, userId: user.id } },
       });
+      if (!existingMembership) {
+        await tx.clientMembership.create({
+          data: {
+            tenantId: tenant.id,
+            userId: user.id,
+            role: ClientRole.CLIENT_MEMBER,
+            status: MembershipStatus.PENDING_APPROVAL,
+          },
+        });
+      } else if (existingMembership.status === MembershipStatus.REMOVED) {
+        await tx.clientMembership.update({
+          where: { id: existingMembership.id },
+          data: { status: MembershipStatus.PENDING_APPROVAL },
+        });
+      } else {
+        return;
+      }
+      await tx.auditLog.create({
+        data: {
+          tenantId: tenant.id,
+          actorId: user.id,
+          action: 'USER_REGISTERED',
+          targetType: 'User',
+          targetId: user.id,
+          scopeType: 'TENANT',
+          scopeId: tenant.id,
+          metadata: { source: 'SELF_REGISTRATION' }
+        }
+      });
+      await this.notifications.dispatchAccessRequest(tx, {
+        userId: user.id,
+        userName,
+        userEmail,
+        tenantId: tenant.id,
+        tenantName: tenant.name,
+      });
+    });
+    try {
+      await persistRegistration();
     } catch (error) {
       // A resposta idempotente impede enumeração pública de e-mails existentes.
       if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')) throw error;
+      // A unique collision can mean another tenant created the same global
+      // identity concurrently. Retry after PostgreSQL resolves that writer so
+      // this tenant still receives its independent pending membership.
+      try {
+        await persistRegistration();
+      } catch (retryError) {
+        if (!(retryError instanceof Prisma.PrismaClientKnownRequestError && retryError.code === 'P2002')) throw retryError;
+      }
     }
     return { status: 'PENDING' as const };
   }

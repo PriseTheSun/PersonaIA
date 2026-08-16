@@ -1,8 +1,25 @@
 import '@testing-library/jest-dom/vitest';
-import { afterEach, vi } from 'vitest';
+import { afterEach, beforeEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 
-afterEach(() => cleanup());
+function serializeConsoleArgument(value: unknown) {
+  if (value instanceof Error) return value.stack ?? value.message;
+  if (typeof value === 'string') return value;
+  try { return JSON.stringify(value); } catch { return String(value); }
+}
+
+beforeEach(() => {
+  for (const method of ['error', 'warn'] as const) {
+    vi.spyOn(console, method).mockImplementation((...argumentsList: unknown[]) => {
+      throw new Error(`Unexpected console.${method}: ${argumentsList.map(serializeConsoleArgument).join(' ')}`);
+    });
+  }
+});
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 
 Object.defineProperty(window, 'matchMedia', {
   writable: true,

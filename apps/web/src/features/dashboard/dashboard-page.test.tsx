@@ -96,7 +96,7 @@ describe('DashboardPage', () => {
     expect(within(indicators).getByText('Personas criadas')).toBeInTheDocument();
     expect(within(indicators).getByText('Usuários ativos')).toBeInTheDocument();
     expect(within(indicators).queryByText('Pedidos aguardando aprovação')).not.toBeInTheDocument();
-    expect(screen.getByText('Evolução das criações')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Evolução das criações' })).toBeInTheDocument();
     expect(screen.queryByText('Revisar solicitações de acesso')).not.toBeInTheDocument();
   });
 });

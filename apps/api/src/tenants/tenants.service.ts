@@ -74,7 +74,11 @@ export class TenantsService {
             isDefault: true,
           },
         });
-        const admin = existingIdentity ?? await tx.user.create({
+        const currentIdentity = existingIdentity ? await tx.user.findUnique({ where: { id: existingIdentity.id } }) : null;
+        if (currentIdentity && !new Set<RecordStatus>([RecordStatus.ACTIVE, RecordStatus.PENDING, RecordStatus.PENDING_APPROVAL, RecordStatus.INVITED]).has(currentIdentity.status)) {
+          throw new ConflictException('A identidade selecionada está inativa e exige reativação explícita.');
+        }
+        const admin = currentIdentity ?? await tx.user.create({
           data: {
             tenantId: tenant.id,
             name: input.admin.name.trim(),
@@ -84,7 +88,7 @@ export class TenantsService {
             status: RecordStatus.ACTIVE,
           },
         });
-        if (existingIdentity && existingIdentity.status !== RecordStatus.ACTIVE) {
+        if (currentIdentity && currentIdentity.status !== RecordStatus.ACTIVE) {
           await tx.user.update({ where: { id: admin.id }, data: { status: RecordStatus.ACTIVE } });
         }
         const membership = await tx.clientMembership.create({
@@ -114,6 +118,7 @@ export class TenantsService {
     const existing = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!existing) throw new NotFoundException('Cliente não encontrado.');
     return this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${tenantId}, 0))`;
       const tenant = await tx.tenant.update({
         where: { id: tenantId },
         data: {
@@ -137,6 +142,7 @@ export class TenantsService {
     const existing = await this.prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!existing) throw new NotFoundException('Cliente não encontrado.');
     await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${tenantId}, 0))`;
       await tx.tenant.update({ where: { id: tenantId }, data: { status: RecordStatus.REMOVED } });
       await tx.auditLog.create({
         data: {
@@ -174,10 +180,14 @@ export class TenantsService {
     const passwordHash = existing?.passwordHash ?? await this.hashPassword(input.password);
     try {
       const admin = await this.prisma.$transaction(async (tx) => {
-        const user = existing ?? await tx.user.create({
+        const currentIdentity = existing ? await tx.user.findUnique({ where: { id: existing.id } }) : null;
+        if (currentIdentity && !new Set<RecordStatus>([RecordStatus.ACTIVE, RecordStatus.PENDING, RecordStatus.PENDING_APPROVAL, RecordStatus.INVITED]).has(currentIdentity.status)) {
+          throw new ConflictException('A identidade selecionada está inativa e exige reativação explícita.');
+        }
+        const user = currentIdentity ?? await tx.user.create({
           data: { tenantId: tenant.id, name: input.name.trim(), email, passwordHash, role: Role.CLIENT_ADMIN, status: RecordStatus.ACTIVE },
         });
-        if (existing && existing.status !== RecordStatus.ACTIVE) {
+        if (currentIdentity && currentIdentity.status !== RecordStatus.ACTIVE) {
           await tx.user.update({ where: { id: user.id }, data: { status: RecordStatus.ACTIVE } });
         }
         await tx.clientMembership.create({

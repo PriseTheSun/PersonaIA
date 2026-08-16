@@ -48,7 +48,10 @@ export class ClientMembershipsService {
       ? await this.prisma.user.findUnique({ where: { id: input.userId } })
       : await this.prisma.user.findUnique({ where: { email: normalizeEmail(input.email!) } });
     if (!user || user.status === RecordStatus.REMOVED) throw new NotFoundException('Usuário não encontrado.');
-    return this.prisma.$transaction(async (tx) => {
+    return this.serializable(async (tx) => {
+      await this.access.lockTenant(tx, tenantId);
+      const activeTenant = await tx.tenant.count({ where: { id: tenantId, status: RecordStatus.ACTIVE } });
+      if (!activeTenant) throw new NotFoundException('Cliente não encontrado.');
       const membership = await tx.clientMembership.upsert({
         where: { tenantId_userId: { tenantId, userId: user.id } },
         update: { role: input.role, status: input.status },
@@ -65,7 +68,7 @@ export class ClientMembershipsService {
         },
       });
       return membership;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    });
   }
 
   async update(tenantId: string, userId: string, input: UpdateClientMembershipInput, actor: Principal) {
@@ -78,7 +81,7 @@ export class ClientMembershipsService {
       && (input.role === ClientRole.CLIENT_MEMBER || (input.status && input.status !== MembershipStatus.ACTIVE));
     const nextRole = input.role ?? existing.role;
     const nextStatus = input.status ?? existing.status;
-    return this.prisma.$transaction(async (tx) => {
+    return this.serializable(async (tx) => {
       await this.access.lockTenant(tx, tenantId);
       if (removesAdmin) {
         const activeAdmins = await tx.clientMembership.count({
@@ -119,7 +122,7 @@ export class ClientMembershipsService {
         },
       });
       return membership;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    });
   }
 
   remove(tenantId: string, userId: string, actor: Principal) {
@@ -162,6 +165,17 @@ export class ClientMembershipsService {
           data: { role: WorkspaceRole.WORKSPACE_ADMIN, status: MembershipStatus.ACTIVE, inheritedFromClientAdmin: true },
         });
       }
+    }
+  }
+
+  private async serializable<T>(operation: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+    try {
+      return await this.prisma.$transaction(operation, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
+        throw new ConflictException('A operação conflitou com outra alteração. Recarregue os dados e tente novamente.');
+      }
+      throw error;
     }
   }
 }

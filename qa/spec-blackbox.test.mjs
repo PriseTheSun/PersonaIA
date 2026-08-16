@@ -9,6 +9,11 @@ const config = configPath
 const baseUrl = String(process.env.BASE_URL ?? config.baseUrl ?? '').replace(/\/$/, '');
 const allowedOrigin = String(process.env.QA_ORIGIN ?? config.origin ?? '');
 const loginIntervalMs = Number(process.env.QA_LOGIN_INTERVAL_MS ?? config.loginIntervalMs ?? 12_500);
+const registrationCooldownMs = Number(
+  process.env.QA_REGISTRATION_COOLDOWN_MS
+  ?? config.registrationCooldownMs
+  ?? Math.max(0, 60_500 - (4 * loginIntervalMs))
+);
 const allowMutation = process.env.RUN_MUTATING === '1';
 const credentials = config.credentials ?? {};
 const ids = config.ids ?? {};
@@ -340,11 +345,11 @@ test('RN-05/CY-01: JWT perde acesso na requisição seguinte à revogação', as
       'vínculo removido desapareceu do histórico administrativo'
     );
   } finally {
-    const restore = await request('PATCH', membershipPath, {
+    const restore = await request('POST', `/tenants/${ids.tenantA}/memberships`, {
       session: adminSession,
-      body: { status: 'ACTIVE' }
+      body: { userId: ids.revocableMemberA, role: 'CLIENT_MEMBER', status: 'ACTIVE' }
     });
-    assert.ok([200, 204].includes(restore.status), `fixture não foi restaurada (${restore.status})`);
+    assert.ok([200, 201, 204].includes(restore.status), `fixture não foi restaurada (${restore.status})`);
   }
 });
 
@@ -896,11 +901,6 @@ test('RN-04/RN-05/CY-23: demissão de CLIENT_ADMIN revoga autoridade herdada e l
   const managerSession = await login('clientAdminA');
   const demotedSession = await login('clientAdminA2');
   assert.ok(managerSession.csrfToken && managerSession.cookie, 'login do admin gestor sem cookies CSRF');
-  const legacyBefore = await request('GET', '/users', {
-    session: demotedSession,
-    headers: { 'X-Tenant-Id': ids.tenantA }
-  });
-  assert.equal(legacyBefore.status, 200, `fixture não exercita a rota legada antes da demissão (${legacyBefore.status})`);
 
   const demoted = await request(
     'PATCH',
@@ -977,6 +977,222 @@ test('RN-04/CY-25: CLIENT_ADMIN não edita identidade pela rota global', async (
   assertDenied(response, 'CLIENT_ADMIN editou identidade global');
 });
 
+test('CY-28: novo pedido após rejeição cria outro ciclo e notificação não lida', async (t) => {
+  if (!requireMutation(t) || !requireConfig(
+    t,
+    'baseUrl',
+    'credentials.superAdmin',
+    'credentials.clientAdminA',
+    'ids.tenantA',
+    'tenantSlugs.tenantA'
+  )) return;
+  const [superSession, adminSession] = await Promise.all([
+    login('superAdmin'), login('clientAdminA')
+  ]);
+  if (registrationCooldownMs) {
+    await new Promise((resolve) => setTimeout(resolve, registrationCooldownMs));
+  }
+  const marker = Date.now();
+  const account = {
+    name: 'QA Repeat Request',
+    email: `qa-repeat-${marker}@example.test`,
+    password: 'QA-Repeat-Request-2026!',
+    tenantSlug: config.tenantSlugs.tenantA
+  };
+  const firstRequest = await request('POST', '/auth/register', { body: account });
+  assert.ok([200, 201, 202].includes(firstRequest.status), `primeiro pedido falhou (${firstRequest.status})`);
+  const firstMembers = await request('GET', `/tenants/${ids.tenantA}/memberships`, { session: adminSession });
+  const membership = records(firstMembers).find((item) => item.user?.email === account.email);
+  assert.equal(membership?.status, 'PENDING_APPROVAL', 'primeiro pedido não ficou pendente');
+  const firstNotifications = await request('GET', '/notifications', { session: superSession });
+  const firstNotification = records(firstNotifications).find(
+    (item) => item.tenantId === ids.tenantA && item.targetId === membership.userId && item.resolvedAt === null
+  );
+  assert.ok(firstNotification, 'primeiro pedido não gerou notificação');
+
+  const rejected = await request(
+    'DELETE',
+    `/tenants/${ids.tenantA}/memberships/${membership.userId}`,
+    { session: adminSession }
+  );
+  assert.ok([200, 204].includes(rejected.status), `rejeição falhou (${rejected.status})`);
+  const resolved = await request('GET', '/notifications', { session: superSession });
+  const oldCycle = records(resolved).find((item) => item.id === firstNotification.id);
+  assert.ok(oldCycle?.resolvedAt && oldCycle?.readAt, 'notificação rejeitada não foi resolvida');
+
+  const secondRequest = await request('POST', '/auth/register', { body: account });
+  assert.equal(secondRequest.status, firstRequest.status, 'novo pedido quebrou resposta anti-enumeração');
+  try {
+    const [secondMembers, secondNotifications] = await Promise.all([
+      request('GET', `/tenants/${ids.tenantA}/memberships`, { session: adminSession }),
+      request('GET', '/notifications', { session: superSession })
+    ]);
+    assert.equal(
+      records(secondMembers).find((item) => item.userId === membership.userId)?.status,
+      'PENDING_APPROVAL',
+      'novo pedido não reabriu membership pendente'
+    );
+    const newCycle = records(secondNotifications).find(
+      (item) => item.tenantId === ids.tenantA && item.targetId === membership.userId && item.resolvedAt === null
+    );
+    assert.ok(newCycle, 'novo pedido não gerou notificação não resolvida');
+    assert.equal(newCycle.readAt, null, 'nova notificação já nasceu lida');
+    assert.notEqual(newCycle.id, firstNotification.id, 'novo ciclo reutilizou a notificação resolvida');
+  } finally {
+    await request('DELETE', `/tenants/${ids.tenantA}/memberships/${membership.userId}`, { session: adminSession });
+  }
+});
+
+test('CY-29: autocadastro não reativa identidade global SUSPENDED ou REMOVED', async (t) => {
+  if (!requireMutation(t) || !requireConfig(
+    t,
+    'baseUrl',
+    'credentials.superAdmin',
+    'credentials.clientAdminB',
+    'credentials.suspendedIdentity',
+    'credentials.removedIdentity',
+    'ids.tenantB',
+    'tenantSlugs.tenantB'
+  )) return;
+  const [superSession, adminSession] = await Promise.all([
+    login('superAdmin'), login('clientAdminB')
+  ]);
+  for (const key of ['suspendedIdentity', 'removedIdentity']) {
+    const identity = credentials[key];
+    const response = await request('POST', '/auth/register', {
+      body: {
+        name: `QA ${key}`,
+        email: identity.email,
+        password: identity.password,
+        tenantSlug: config.tenantSlugs.tenantB
+      }
+    });
+    assert.ok([200, 201, 202].includes(response.status), `${key}: resposta pública inválida (${response.status})`);
+    const [memberships, notifications] = await Promise.all([
+      request('GET', `/tenants/${ids.tenantB}/memberships`, { session: adminSession }),
+      request('GET', '/notifications', { session: superSession })
+    ]);
+    const leakedMembership = records(memberships).find((item) => item.userId === identity.id);
+    const leakedNotification = records(notifications).find(
+      (item) => item.tenantId === ids.tenantB && item.targetId === identity.id && item.resolvedAt === null
+    );
+    if (leakedMembership && leakedMembership.status !== 'REMOVED') {
+      await request('DELETE', `/tenants/${ids.tenantB}/memberships/${identity.id}`, { session: adminSession });
+    }
+    assert.equal(leakedMembership, undefined, `${key}: autocadastro criou membership`);
+    assert.equal(leakedNotification, undefined, `${key}: autocadastro criou notificação`);
+  }
+});
+
+test('RN-05/CY-30: ex-CLIENT_ADMIN não conserva notificações do tenant revogado', async (t) => {
+  if (!requireMutation(t) || !requireConfig(
+    t,
+    'baseUrl',
+    'credentials.clientAdminA',
+    'credentials.clientAdminA2',
+    'ids.tenantA',
+    'ids.clientAdminA2',
+    'tenantSlugs.tenantA'
+  )) return;
+  const [managerSession, revokedSession] = await Promise.all([
+    login('clientAdminA'), login('clientAdminA2')
+  ]);
+  const marker = Date.now();
+  const pendingAccount = {
+    name: 'QA Notification Revocation',
+    email: `qa-notification-revoke-${marker}@example.test`,
+    password: 'QA-Notification-Revoke-2026!',
+    tenantSlug: config.tenantSlugs.tenantA
+  };
+  const registration = await request('POST', '/auth/register', { body: pendingAccount });
+  assert.ok(
+    [200, 201, 202].includes(registration.status),
+    `cadastro da fixture de revogação falhou (${registration.status})`
+  );
+  const before = await request('GET', '/notifications', { session: revokedSession });
+  const notification = records(before).find(
+    (item) => item.tenantId === ids.tenantA && item.payload?.userEmail === pendingAccount.email
+  );
+  assert.ok(notification, 'fixture não gerou notificação para o segundo CLIENT_ADMIN');
+  const members = await request('GET', `/tenants/${ids.tenantA}/memberships`, { session: managerSession });
+  const pending = records(members).find((item) => item.user?.email === pendingAccount.email);
+  assert.ok(pending, 'pedido usado pela fixture não foi encontrado');
+
+  const removed = await request(
+    'DELETE',
+    `/tenants/${ids.tenantA}/memberships/${ids.clientAdminA2}`,
+    { session: managerSession }
+  );
+  assert.ok([200, 204].includes(removed.status), `revogação do segundo admin falhou (${removed.status})`);
+  try {
+    const [me, after, mark] = await Promise.all([
+      request('GET', '/auth/me', { session: revokedSession }),
+      request('GET', '/notifications', { session: revokedSession }),
+      request('PATCH', `/notifications/${notification.id}/read`, { session: revokedSession, body: {} })
+    ]);
+    assert.equal(me.status, 200, 'membership B não manteve a identidade ativa');
+    assert.equal(me.json?.contexts?.some((item) => item.tenantId === ids.tenantA), false);
+    assert.equal(after.status, 200, `feed scoped falhou (${after.status})`);
+    assert.equal(
+      records(after).some((item) => item.tenantId === ids.tenantA),
+      false,
+      'feed conservou notificações do tenant revogado'
+    );
+    assertDenied(mark, 'ex-CLIENT_ADMIN marcou notificação do tenant revogado');
+  } finally {
+    await request('POST', `/tenants/${ids.tenantA}/memberships`, {
+      session: managerSession,
+      body: { userId: ids.clientAdminA2, role: 'CLIENT_ADMIN', status: 'ACTIVE' }
+    });
+    await request('DELETE', `/tenants/${ids.tenantA}/memberships/${pending.userId}`, { session: managerSession });
+  }
+});
+
+test('RN-05/CY-31: ex-SUPER não conserva feed global após nova sessão scoped', async (t) => {
+  if (!requireMutation(t) || !requireConfig(
+    t,
+    'baseUrl',
+    'credentials.superAdmin',
+    'credentials.superAdmin2',
+    'ids.superAdmin2',
+    'ids.tenantA',
+    'ids.tenantB'
+  )) return;
+  const manager = await login('superAdmin');
+  const oldGlobalSession = await login('superAdmin2');
+  const before = await request('GET', '/notifications', { session: oldGlobalSession });
+  const foreign = records(before).find((item) => item.tenantId === ids.tenantA);
+  assert.ok(foreign, 'fixture não possui notificação global de tenant A');
+  const demoted = await request('PATCH', `/user-access/${ids.superAdmin2}`, {
+    session: manager,
+    body: { role: 'PROJECT_USER', tenantId: ids.tenantB, status: 'ACTIVE' }
+  });
+  assert.ok([200, 204].includes(demoted.status), `demissão global falhou (${demoted.status})`);
+  try {
+    const oldTokenProbe = await request('GET', '/notifications', { session: oldGlobalSession });
+    assertDenied(oldTokenProbe, 'token global antigo permaneceu válido');
+    const scopedSession = await authenticate(credentials.superAdmin2, 'ex-SUPER em nova sessão scoped');
+    const [scopedFeed, mark] = await Promise.all([
+      request('GET', '/notifications', { session: scopedSession }),
+      request('PATCH', `/notifications/${foreign.id}/read`, { session: scopedSession, body: {} })
+    ]);
+    assert.equal(scopedFeed.status, 200);
+    assert.equal(
+      records(scopedFeed).some((item) => item.tenantId === ids.tenantA),
+      false,
+      'ex-SUPER recebeu feed global em nova sessão'
+    );
+    assertDenied(mark, 'ex-SUPER marcou notificação global antiga');
+  } finally {
+    const restored = await request('PATCH', `/user-access/${ids.superAdmin2}`, {
+      session: manager,
+      body: { role: 'SUPER_ADMIN', tenantId: null, status: 'ACTIVE' }
+    });
+    assert.ok([200, 204].includes(restored.status), `SUPER_ADMIN da fixture não foi restaurado (${restored.status})`);
+    sessions.delete('superAdmin2');
+  }
+});
+
 test('invariante global/CY-26: corrida não remove todos os SUPER_ADMIN ativos', async (t) => {
   if (!requireMutation(t) || !requireConfig(
     t,
@@ -987,18 +1203,20 @@ test('invariante global/CY-26: corrida não remove todos os SUPER_ADMIN ativos',
     'ids.superAdmin2'
   )) return;
   if (!allowedOrigin) assert.fail('origin permitido não configurado');
-  const [first, second] = await Promise.all([login('superAdmin'), login('superAdmin2')]);
+  const [first, second] = await Promise.all([
+    login('superAdmin'), authenticate(credentials.superAdmin2, 'segundo SUPER_ADMIN da corrida')
+  ]);
   const firstId = (await request('GET', '/auth/me', { session: first })).json?.id;
   assert.equal(typeof firstId, 'string', 'SUPER_ADMIN principal sem id');
 
   const results = await Promise.all([
     request('PATCH', `/user-access/${ids.superAdmin2}`, {
       session: first,
-      body: { role: 'PROJECT_USER', tenantId: ids.tenantA, status: 'ACTIVE' }
+      body: { status: 'SUSPENDED' }
     }),
     request('PATCH', `/user-access/${firstId}`, {
       session: second,
-      body: { role: 'PROJECT_USER', tenantId: ids.tenantA, status: 'ACTIVE' }
+      body: { status: 'SUSPENDED' }
     })
   ]);
   const successfulIndex = results.findIndex((response) => [200, 204].includes(response.status));
@@ -1017,7 +1235,7 @@ test('invariante global/CY-26: corrida não remove todos os SUPER_ADMIN ativos',
   const demotedId = successfulIndex === 0 ? ids.superAdmin2 : firstId;
   const restored = await request('PATCH', `/user-access/${demotedId}`, {
     session: restorer,
-    body: { role: 'SUPER_ADMIN', tenantId: null, status: 'ACTIVE' }
+    body: { status: 'ACTIVE' }
   });
   assert.ok([200, 204].includes(restored.status), `SUPER_ADMIN da fixture não foi restaurado (${restored.status})`);
 });

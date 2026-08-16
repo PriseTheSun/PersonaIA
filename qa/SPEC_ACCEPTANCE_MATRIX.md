@@ -112,6 +112,10 @@ não dispensa tenant/workspace explícito nem permite associação cross-tenant.
 | CY-25 | CLIENT_ADMIN (inclusive `User.role` stale) chama `/user-access` | listagem e edição global negadas; promoção a SUPER_ADMIN só ocorre na rota global SUPER-only |
 | CY-26 | dois SUPER_ADMIN tentam demover um ao outro simultaneamente | exatamente uma demissão pode confirmar; pelo menos um SUPER_ADMIN global permanece ativo sob lock/transação |
 | CY-27 | vínculo é rejeitado/removido | sai do acesso efetivo, mas permanece histórico e listável ao administrador com status `REMOVED` |
+| CY-28 | pedido é rejeitado, e a mesma identidade se cadastra novamente no mesmo cliente com senha correta | vínculo volta a `PENDING_APPROVAL` e uma nova notificação não lida, distinta da anterior resolvida, chega aos admins |
+| CY-29 | identidade global `SUSPENDED`/`REMOVED` se autocadastra em outro cliente com senha correta | resposta pública continua anti-enumeração, sem criar membership ou notificação; reativação global exige SUPER explícito |
+| CY-30 | CLIENT_ADMIN perde vínculo A mas mantém identidade ativa em B | mesmo JWT perde feed e ação sobre notificações de A; autorização do sino é reavaliada por tenant em toda requisição |
+| CY-31 | SUPER_ADMIN é demovido para membro ativo de B | token antigo é invalidado e nova sessão não herda o feed global nem marca notificações fora do escopo atual |
 
 ## 5. Interface: acessibilidade, responsividade e i18n
 

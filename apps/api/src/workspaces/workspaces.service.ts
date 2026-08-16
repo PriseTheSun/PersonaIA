@@ -62,6 +62,9 @@ export class WorkspacesService {
     await this.access.requireTenant(actor, tenantId, true);
     try {
       return await this.prisma.$transaction(async (tx) => {
+        await this.access.lockTenant(tx, tenantId);
+        const activeTenant = await tx.tenant.count({ where: { id: tenantId, status: RecordStatus.ACTIVE } });
+        if (!activeTenant) throw new NotFoundException('Cliente não encontrado.');
         const workspace = await tx.workspace.create({
           data: {
             tenantId,
@@ -100,7 +103,7 @@ export class WorkspacesService {
 
   async update(tenantId: string, workspaceId: string, input: UpdateWorkspaceInput, actor: Principal) {
     await this.requireNestedAdmin(tenantId, workspaceId, actor);
-    return this.prisma.$transaction(async (tx) => {
+    return this.serializable(async (tx) => {
       const workspace = await tx.workspace.update({
         where: { id: workspaceId },
         data: {
@@ -122,7 +125,7 @@ export class WorkspacesService {
   async remove(tenantId: string, workspaceId: string, actor: Principal) {
     const workspace = await this.requireNestedAdmin(tenantId, workspaceId, actor);
     if (workspace.isDefault) throw new ConflictException('O workspace padrão não pode ser removido.');
-    await this.prisma.$transaction(async (tx) => {
+    await this.serializable(async (tx) => {
       await this.access.lockWorkspace(tx, workspaceId);
       const activeProjects = await tx.project.count({ where: { workspaceId, status: RecordStatus.ACTIVE } });
       if (activeProjects) throw new ConflictException('Arquive os projetos ativos antes de remover o workspace.');
@@ -133,7 +136,7 @@ export class WorkspacesService {
           scopeType: 'WORKSPACE', scopeId: workspaceId,
         },
       });
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    });
     return { success: true };
   }
 
@@ -164,7 +167,7 @@ export class WorkspacesService {
     if (clientMembership.role === ClientRole.CLIENT_ADMIN) {
       throw new ConflictException('CLIENT_ADMIN já possui acesso administrativo automático ao workspace.');
     }
-    return this.prisma.$transaction(async (tx) => {
+    return this.serializable(async (tx) => {
       const membership = await tx.workspaceMembership.upsert({
         where: { workspaceId_userId: { workspaceId, userId: input.userId } },
         update: { role: input.role, status: input.status, inheritedFromClientAdmin: false },
@@ -179,7 +182,7 @@ export class WorkspacesService {
         },
       });
       return membership;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    });
   }
 
   async updateMember(workspaceId: string, userId: string, input: UpdateWorkspaceMemberInput, actor: Principal) {
@@ -196,7 +199,7 @@ export class WorkspacesService {
     }
     const removesAdmin = existing.role === WorkspaceRole.WORKSPACE_ADMIN && existing.status === MembershipStatus.ACTIVE
       && (input.role === WorkspaceRole.WORKSPACE_MEMBER || (input.status && input.status !== MembershipStatus.ACTIVE));
-    return this.prisma.$transaction(async (tx) => {
+    return this.serializable(async (tx) => {
       await this.access.lockWorkspace(tx, workspaceId);
       if (removesAdmin) {
         const admins = await tx.workspaceMembership.count({
@@ -218,7 +221,7 @@ export class WorkspacesService {
         },
       });
       return membership;
-    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    });
   }
 
   removeMember(workspaceId: string, userId: string, actor: Principal) {
@@ -291,5 +294,16 @@ export class WorkspacesService {
       where: { userId, tenantId, role: ClientRole.CLIENT_ADMIN, status: MembershipStatus.ACTIVE },
     });
     return count > 0;
+  }
+
+  private async serializable<T>(operation: (tx: Prisma.TransactionClient) => Promise<T>): Promise<T> {
+    try {
+      return await this.prisma.$transaction(operation, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
+        throw new ConflictException('A operação conflitou com outra alteração. Recarregue os dados e tente novamente.');
+      }
+      throw error;
+    }
   }
 }

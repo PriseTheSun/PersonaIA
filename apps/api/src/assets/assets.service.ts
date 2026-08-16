@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   AssetType, AssociationAction, ClientRole, Feature, MembershipStatus,
   PermissionLevel, Prisma, RecordStatus,
@@ -107,6 +107,9 @@ export class AssetsService {
       if (workspace.tenantId !== tenantId) throw new NotFoundException('Workspace não encontrado.');
     }
     return this.prisma.$transaction(async (tx) => {
+      await this.access.lockTenant(tx, tenantId);
+      const activeTenant = await tx.tenant.count({ where: { id: tenantId, status: RecordStatus.ACTIVE } });
+      if (!activeTenant) throw new NotFoundException('Cliente não encontrado.');
       const asset = kind === 'PERSONA'
         ? await tx.persona.create({ data: { tenantId, name: input.name.trim(), description: input.description?.trim(), data: input.data as Prisma.InputJsonValue } })
         : await tx.questionnaire.create({ data: { tenantId, name: input.name.trim(), description: input.description?.trim(), data: input.data as Prisma.InputJsonValue } });
@@ -246,24 +249,10 @@ export class AssetsService {
       const tenantAdmin = this.access.isSuper(actor) || (await tx.clientMembership.count({
         where: { tenantId, userId: actor.id, role: ClientRole.CLIENT_ADMIN, status: MembershipStatus.ACTIVE },
       })) > 0;
+      if (!tenantAdmin) throw new ForbiddenException('A substituição em lote exige CLIENT_ADMIN; use associação/desassociação por workspace.');
       const manageable = new Set<string>();
-      if (tenantAdmin) {
-        for (const workspaceId of [...new Set([...liveIds, ...requestedIds])]) manageable.add(workspaceId);
-      } else {
-        const workspaceAdmins = await tx.workspaceMembership.findMany({
-          where: {
-            tenantId, userId: actor.id, role: 'WORKSPACE_ADMIN', status: MembershipStatus.ACTIVE,
-            clientMembership: { status: MembershipStatus.ACTIVE }, workspaceId: { in: requestedIds },
-          },
-          select: { workspaceId: true },
-        });
-        for (const { workspaceId } of workspaceAdmins) manageable.add(workspaceId);
-        if (requestedIds.some((workspaceId) => !manageable.has(workspaceId))) throw new NotFoundException('Workspace não encontrado.');
-      }
-      // A workspace admin's batch is additive within the requested scope;
-      // associations omitted from the UI are preserved. Use the scoped
-      // DELETE endpoint for an explicit disassociation.
-      const preservedIds = tenantAdmin ? liveIds.filter((workspaceId) => !manageable.has(workspaceId)) : liveIds;
+      for (const workspaceId of [...new Set([...liveIds, ...requestedIds])]) manageable.add(workspaceId);
+      const preservedIds = liveIds.filter((workspaceId) => !manageable.has(workspaceId));
       const desiredIds = [...new Set([...preservedIds, ...requestedIds])];
       const toAdd = desiredIds.filter((workspaceId) => !liveIds.includes(workspaceId));
       const toRemove = liveIds.filter((workspaceId) => manageable.has(workspaceId) && !desiredIds.includes(workspaceId));

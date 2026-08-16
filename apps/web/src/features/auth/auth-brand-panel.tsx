@@ -56,7 +56,6 @@ export function AuthBrandPanel() {
             alt=""
             loading="eager"
             decoding="async"
-            fetchPriority={index === 0 ? 'high' : 'auto'}
             className={cn('absolute inset-0 size-full object-cover opacity-0 transition-opacity duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]', index === activeSlide && 'auth-carousel-image-active opacity-100')}
           />
         ))}

@@ -68,6 +68,8 @@ O comando prepara automaticamente o PostgreSQL de desenvolvimento pelo Docker, a
 
 Use `Ctrl+C` para encerrar API e frontend. O banco continua no Docker para preservar os dados; `docker compose stop postgres` o encerra. A porta local do banco pode ser alterada com `POSTGRES_DEV_PORT` no `.env`.
 
+Se API e frontend já estiverem saudáveis, executar `npm run dev` novamente apenas confirma os dois endereços e encerra com sucesso. Se somente uma porta estiver ocupada ou algum serviço não responder, o comando informa o conflito para evitar iniciar uma instância parcialmente quebrada.
+
 ## Verificação
 
 ```bash
