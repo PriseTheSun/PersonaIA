@@ -208,7 +208,7 @@ Release é bloqueado quando houver:
 - SQL injection, command injection, SSRF explorável ou XSS armazenado;
 - falha crítica/alta explorável sem mitigação e aceite formal com validade;
 - restore de backup nunca testado para a versão produtiva;
-- teste obrigatório da seção crítica de `qa/TEST_PLAN.md` falhando.
+- teste obrigatório da seção crítica de `docs/qa/TEST_PLAN.md` falhando.
 
 ## 9. Resposta a incidente
 

@@ -49,4 +49,17 @@ describe('TenantsPage', () => {
     await user.click(within(row).getByRole('button', { name: 'Ações: Organização Acme' }));
     expect(screen.getByRole('menuitem', { name: 'Gerenciar' })).toHaveAttribute('href', '/workspaces?tenant=tenant-1');
   });
+
+  it('usa um campo multilinha para a descrição da nova organização', async () => {
+    window.localStorage.setItem('personaia.locale', 'pt-BR');
+    const user = userEvent.setup();
+    render(<I18nProvider><MemoryRouter><TenantsPage /></MemoryRouter></I18nProvider>);
+
+    await user.click(screen.getByRole('button', { name: 'Adicionar organização' }));
+
+    const description = screen.getByRole('textbox', { name: 'Descrição' });
+    expect(description.tagName).toBe('TEXTAREA');
+    expect(description).toHaveAttribute('maxlength', '500');
+    expect(description).toHaveAttribute('rows', '4');
+  });
 });

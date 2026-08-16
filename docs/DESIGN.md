@@ -163,6 +163,7 @@ O sistema é plano por padrão. Profundidade vem de camadas tonais e divisores; 
 ### Inputs / Fields
 
 - **Style:** fundo Branco Puro, borda Cinza Neutro, raio de 8 px e altura de 36–40 px.
+- **Textarea:** descrições e textos multilinha usam o componente compartilhado `Textarea`, ocupam a largura disponível, começam com quatro linhas e permitem redimensionamento apenas vertical.
 - **Focus:** anel Azul Elétrico de 2 px com offset; labels permanecem visíveis.
 - **Error / Disabled:** erro combina cor, ícone e mensagem; disabled preserva contraste e explica indisponibilidade quando necessário.
 

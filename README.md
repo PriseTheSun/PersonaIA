@@ -88,7 +88,7 @@ npm audit --omit=dev
 node --test qa/spec-blackbox.test.mjs
 ```
 
-O roteiro completo está em [qa/TEST_PLAN.md](./qa/TEST_PLAN.md), e a rastreabilidade dos 12 critérios de aceite em [qa/SPEC_ACCEPTANCE_MATRIX.md](./qa/SPEC_ACCEPTANCE_MATRIX.md). Os requisitos e gates de segurança ficam em [docs/SECURITY.md](./docs/SECURITY.md), e a análise STRIDE em [docs/THREAT_MODEL.md](./docs/THREAT_MODEL.md).
+O roteiro completo está em [docs/qa/TEST_PLAN.md](./docs/qa/TEST_PLAN.md), e a rastreabilidade dos 12 critérios de aceite em [docs/qa/SPEC_ACCEPTANCE_MATRIX.md](./docs/qa/SPEC_ACCEPTANCE_MATRIX.md). Os requisitos e gates de segurança ficam em [docs/SECURITY.md](./docs/SECURITY.md), e a análise STRIDE em [docs/THREAT_MODEL.md](./docs/THREAT_MODEL.md). O índice da documentação está em [docs/README.md](./docs/README.md).
 
 ## Segurança antes de produção
 
