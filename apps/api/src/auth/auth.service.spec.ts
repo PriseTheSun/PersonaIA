@@ -22,7 +22,7 @@ describe('AuthService refresh reuse detection', () => {
       sub: '30000000-0000-4000-8000-000000000003', sid: '10000000-0000-4000-8000-000000000001', fid: '20000000-0000-4000-8000-000000000002', type: 'refresh', ver: 0
     }) };
     const config = { getOrThrow: jest.fn((key: string) => key.includes('SECRET') ? 'a-secure-test-secret-that-is-long-enough' : 7) };
-    const service = new AuthService(prisma as never, jwt as never, config as never, {} as never);
+    const service = new AuthService(prisma as never, jwt as never, config as never, {} as never, {} as never);
 
     await expect(service.refresh('replayed-token', {})).rejects.toBeInstanceOf(UnauthorizedException);
     expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ familyId: '20000000-0000-4000-8000-000000000002' }) }));
@@ -49,13 +49,18 @@ describe('AuthService account approval', () => {
       $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx))
     };
     const notifications = { dispatchAccessRequest: jest.fn().mockResolvedValue(undefined) };
-    const service = new AuthService(prisma as never, {} as never, {} as never, notifications as never);
+    const requestedProject = { id: '20000000-0000-4000-8000-000000000002', name: 'Pesquisa nacional' };
+    const projectCodes = { resolveProject: jest.fn().mockResolvedValue(requestedProject) };
+    const service = new AuthService(prisma as never, {} as never, {} as never, notifications as never, projectCodes as never);
 
     await expect(service.register({
-      name: 'Pessoa Teste', email: 'Pessoa@Teste.dev', password: 'UmaSenha#MuitoForte2026', tenantSlug: 'cliente-teste'
+      name: 'Pessoa Teste', email: 'Pessoa@Teste.dev', password: 'UmaSenha#MuitoForte2026', tenantSlug: 'cliente-teste', projectCode: 'ABCD2345EFGH'
     })).resolves.toEqual({ status: 'PENDING' });
     expect(tx.user.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ email: 'pessoa@teste.dev', role: 'PROJECT_USER', status: 'PENDING_APPROVAL' })
+    }));
+    expect(tx.clientMembership.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ requestedProjectId: requestedProject.id, status: 'PENDING_APPROVAL' }),
     }));
     expect(tx.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ action: 'USER_REGISTERED' }) }));
     expect(notifications.dispatchAccessRequest).toHaveBeenCalledWith(tx, {
@@ -63,7 +68,9 @@ describe('AuthService account approval', () => {
       userName: 'Pessoa Teste',
       userEmail: 'pessoa@teste.dev',
       tenantId: '10000000-0000-4000-8000-000000000001',
-      tenantName: 'Cliente Teste'
+      tenantName: 'Cliente Teste',
+      requestedProjectId: requestedProject.id,
+      requestedProjectName: requestedProject.name,
     });
   });
 
@@ -76,7 +83,7 @@ describe('AuthService account approval', () => {
         clientMemberships: []
       }) }
     };
-    const service = new AuthService(prisma as never, {} as never, {} as never, {} as never);
+    const service = new AuthService(prisma as never, {} as never, {} as never, {} as never, {} as never);
 
     try {
       await service.login({ email: 'pessoa@teste.dev', password: 'UmaSenha#MuitoForte2026', rememberMe: false }, {});
@@ -119,7 +126,7 @@ describe('AuthService 120-minute absolute session lifetime', () => {
     };
     const jwt = { signAsync: jest.fn().mockResolvedValueOnce('refresh-token').mockResolvedValueOnce('access-token') };
     const config = { getOrThrow: jest.fn((key: string) => configValues[key]) };
-    const service = new AuthService(prisma as never, jwt as never, config as never, {} as never);
+    const service = new AuthService(prisma as never, jwt as never, config as never, {} as never, {} as never);
 
     const result = await service.login({ email: user.email, password: 'UmaSenha#MuitoForte2026', rememberMe: true }, {});
 
@@ -152,7 +159,7 @@ describe('AuthService 120-minute absolute session lifetime', () => {
       signAsync: jest.fn().mockResolvedValueOnce('rotated-refresh-token').mockResolvedValueOnce('rotated-access-token'),
     };
     const config = { getOrThrow: jest.fn((key: string) => configValues[key]) };
-    const service = new AuthService(prisma as never, jwt as never, config as never, {} as never);
+    const service = new AuthService(prisma as never, jwt as never, config as never, {} as never, {} as never);
 
     const result = await service.refresh('refresh-token', {});
 

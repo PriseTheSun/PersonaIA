@@ -36,6 +36,7 @@ export class ClientMembershipsService {
       select: {
         id: true, tenantId: true, userId: true, role: true, status: true, createdAt: true, updatedAt: true,
         user: { select: { id: true, name: true, email: true, status: true, lastLoginAt: true } },
+        requestedProject: { select: { id: true, name: true, status: true } },
         _count: { select: { workspaceMemberships: { where: { status: MembershipStatus.ACTIVE } } } },
       },
       orderBy: { createdAt: 'asc' },
@@ -95,6 +96,24 @@ export class ClientMembershipsService {
       });
       if (nextStatus === MembershipStatus.ACTIVE) {
         await this.activateIdentity(tx, userId, tenantId, nextRole);
+        if (existing.requestedProjectId) {
+          const requestedProject = await tx.project.findFirst({
+            where: { id: existing.requestedProjectId, tenantId, status: RecordStatus.ACTIVE },
+            select: { id: true },
+          });
+          if (requestedProject) {
+            await tx.projectMembership.upsert({
+              where: { projectId_userId: { projectId: requestedProject.id, userId } },
+              update: { permission: 'VIEWER' },
+              create: { tenantId, projectId: requestedProject.id, userId, permission: 'VIEWER' },
+            });
+            await tx.clientMembership.update({
+              where: { id: existing.id },
+              data: { requestedProjectId: null },
+            });
+            await this.notifications.resolveMissingProjectAccess(tx, userId, tenantId);
+          }
+        }
       } else if (existing.status === MembershipStatus.ACTIVE) {
         await tx.workspaceMembership.updateMany({
           where: { tenantId, userId, inheritedFromClientAdmin: true, status: MembershipStatus.ACTIVE },

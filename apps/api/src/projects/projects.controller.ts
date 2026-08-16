@@ -28,6 +28,11 @@ export class ProjectsController {
     return this.projects.create(input, actor);
   }
 
+  @Get(':id/access-code')
+  accessCode(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() actor: Principal) {
+    return this.projects.accessCode(id, actor);
+  }
+
   @Patch(':id')
   update(@Param('id', ParseUUIDPipe) id: string, @Body(new ZodValidationPipe(updateProjectSchema)) input: UpdateProjectInput, @CurrentUser() actor: Principal) {
     return this.projects.update(id, input, actor);

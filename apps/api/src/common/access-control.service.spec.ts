@@ -17,6 +17,7 @@ describe('AccessControlService permission resolution', () => {
           .mockResolvedValueOnce({ role: 'WORKSPACE_MEMBER', status: 'ACTIVE' }),
       },
       projectFunctionalPermission: { findUnique: jest.fn().mockResolvedValue(projectRule) },
+      projectMembership: { findUnique: jest.fn().mockResolvedValue(null) },
       workspacePermission: { findUnique: jest.fn().mockResolvedValue({ level: 'ADMIN', effect: 'ALLOW' }) },
     };
     const service = new AccessControlService(prisma as never);

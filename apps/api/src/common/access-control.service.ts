@@ -37,17 +37,34 @@ export class AccessControlService {
           where: { status: MembershipStatus.ACTIVE, workspace: { status: 'ACTIVE' } },
           select: {
             workspaceId: true, role: true, status: true,
-            workspace: { select: { id: true, name: true, slug: true, isDefault: true } },
+            workspace: {
+              select: {
+                id: true, name: true, slug: true, isDefault: true,
+                _count: { select: { projects: { where: { status: 'ACTIVE' } } } },
+              },
+            },
             workspacePermissions: { select: { feature: true, level: true, effect: true } },
           },
           orderBy: { createdAt: 'asc' },
         },
+        projectMemberships: {
+          where: { project: { status: 'ACTIVE' } },
+          select: { id: true },
+        },
+        projectPermissions: {
+          where: { effect: PermissionEffect.ALLOW, project: { status: 'ACTIVE' } },
+          select: { id: true },
+        },
       },
       orderBy: { createdAt: 'asc' },
     });
-    return memberships.map(({ user, ...membership }) => ({
+    return memberships.map(({ user, projectMemberships, projectPermissions, ...membership }) => ({
       ...membership,
       selected: user.tenantId === membership.tenantId,
+      hasProjectAccess: membership.role === ClientRole.CLIENT_ADMIN
+        || projectMemberships.length > 0
+        || projectPermissions.length > 0
+        || membership.workspaceMemberships.some(({ workspace }) => workspace._count.projects > 0),
       workspaces: membership.workspaceMemberships.map(({ workspacePermissions, ...item }) => ({
         ...item, permissions: workspacePermissions,
       })),
@@ -121,12 +138,30 @@ export class AccessControlService {
     if (clientAdmin?.status === MembershipStatus.ACTIVE && clientAdmin.role === ClientRole.CLIENT_ADMIN) return project ?? workspace!;
 
     if (project) {
-      const projectRule = await this.prisma.projectFunctionalPermission.findUnique({
-        where: { projectId_userId_feature: { projectId: project.id, userId: actor.id, feature: input.feature } },
-        select: { level: true, effect: true },
-      });
+      const [projectRule, projectMembership] = await Promise.all([
+        this.prisma.projectFunctionalPermission.findUnique({
+          where: { projectId_userId_feature: { projectId: project.id, userId: actor.id, feature: input.feature } },
+          select: { level: true, effect: true },
+        }),
+        this.prisma.projectMembership.findUnique({
+          where: { projectId_userId: { projectId: project.id, userId: actor.id } },
+          select: { permission: true },
+        }),
+      ]);
       if (projectRule) {
         if (projectRule.effect === PermissionEffect.DENY || rank[projectRule.level] < rank[input.level]) {
+          throw new ForbiddenException('Permissão funcional insuficiente.');
+        }
+        return project;
+      }
+      const inheritedLevel: Record<ProjectPermission, PermissionLevel> = {
+        [ProjectPermission.OWNER]: PermissionLevel.ADMIN,
+        [ProjectPermission.MANAGER]: PermissionLevel.ADMIN,
+        [ProjectPermission.CONTRIBUTOR]: PermissionLevel.WRITE,
+        [ProjectPermission.VIEWER]: PermissionLevel.READ,
+      };
+      if (projectMembership) {
+        if (rank[inheritedLevel[projectMembership.permission]] < rank[input.level]) {
           throw new ForbiddenException('Permissão funcional insuficiente.');
         }
         return project;
@@ -134,20 +169,10 @@ export class AccessControlService {
     }
 
     if (!workspaceId) {
-      const membership = await this.prisma.projectMembership.findUnique({
-        where: { projectId_userId: { projectId: project!.id, userId: actor.id } },
-        select: { permission: true },
-      });
-      const inheritedLevel: Record<ProjectPermission, PermissionLevel> = {
-        [ProjectPermission.OWNER]: PermissionLevel.ADMIN,
-        [ProjectPermission.MANAGER]: PermissionLevel.ADMIN,
-        [ProjectPermission.CONTRIBUTOR]: PermissionLevel.WRITE,
-        [ProjectPermission.VIEWER]: PermissionLevel.READ,
-      };
-      if (!membership || rank[inheritedLevel[membership.permission]] < rank[input.level]) {
+      if (project) {
         throw new ForbiddenException('Permissão funcional insuficiente.');
       }
-      return project!;
+      throw new ForbiddenException('Acesso não permitido.');
     }
 
     const authorizedWorkspace = await this.requireWorkspace(actor, workspaceId);

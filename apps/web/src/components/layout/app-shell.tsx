@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { FolderClock } from 'lucide-react';
 import { Outlet } from 'react-router-dom';
 import { AppLogo } from '@/components/shared/app-logo';
 import { LanguageSelector } from '@/components/shared/language-selector';
@@ -15,6 +16,8 @@ export function AppShell() {
   const { t } = useTranslation();
   const auth = useAuth();
   if (auth.status !== 'authenticated') return null;
+  const waitingForProject = auth.activeContext?.clientRole === 'CLIENT_MEMBER'
+    && auth.activeContext.hasProjectAccess === false;
   return (
     <SidebarProvider>
       <Sidebar collapsible="icon" mobileTitle={t('common.menu')} mobileDescription={t('common.appName')}>
@@ -39,6 +42,15 @@ export function AppShell() {
           <div className="ml-auto flex items-center gap-0.5"><LanguageSelector /><ThemeSelector /><NotificationsMenu /></div>
         </header>
         <main id="main-content" className="mx-auto w-full max-w-[1440px] px-3 py-5 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+          {waitingForProject ? (
+            <section className="mb-6 flex items-start gap-3 rounded-lg border border-primary/20 bg-primary/5 p-4" role="status" aria-labelledby="project-access-wait-title">
+              <span className="grid size-9 shrink-0 place-items-center rounded-full bg-background text-primary shadow-sm ring-1 ring-primary/15"><FolderClock className="size-4" aria-hidden="true" /></span>
+              <div className="min-w-0">
+                <h2 id="project-access-wait-title" className="text-sm font-semibold">{t('projectAccessWaiting.title')}</h2>
+                <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">{t('projectAccessWaiting.description', { organization: auth.activeContext?.tenantName })}</p>
+              </div>
+            </section>
+          ) : null}
           <Outlet />
         </main>
       </SidebarInset>

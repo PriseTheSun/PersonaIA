@@ -1,4 +1,4 @@
-import { Ban, CheckCircle2, CircleX, MoreHorizontal, RotateCcw, ShieldCheck, UserRoundCog } from 'lucide-react';
+import { Ban, CheckCircle2, CircleX, KeyRound, MoreHorizontal, RotateCcw, ShieldCheck, UserRoundCog } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
@@ -13,6 +13,7 @@ import { SearchField } from '@/components/shared/search-field';
 import { EmptyState, ErrorState, LoadingRows } from '@/components/shared/states';
 import { StatusBadge } from '@/components/shared/status-badge';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/features/auth/auth-store';
@@ -180,6 +181,7 @@ export function AccessControlPage() {
                             <div className="min-w-0">
                               <h2 className="truncate text-sm font-semibold">{membership.user.name}{isSelf ? <span className="ml-2 text-xs font-normal text-muted-foreground">{t('accessControl.you')}</span> : null}</h2>
                               <p className="truncate text-xs text-muted-foreground">{membership.user.email}</p>
+                              {membership.requestedProject ? <Badge variant="outline" className="mt-1.5 max-w-full gap-1 bg-card font-normal"><KeyRound className="size-3" aria-hidden="true" /><span className="truncate">{t('accessControl.requestedProject', { name: membership.requestedProject.name })}</span></Badge> : null}
                               {membership.createdAt ? <time className="mt-1 block text-xs text-muted-foreground" dateTime={membership.createdAt}>{formatDate(membership.createdAt, i18n.language)}</time> : null}
                             </div>
                           </div>

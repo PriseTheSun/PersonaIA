@@ -145,10 +145,12 @@ model ClientMembership {
   id                   String                        @id @default(uuid()) @db.Uuid
   tenantId             String                        @db.Uuid
   userId               String                        @db.Uuid
+  requestedProjectId   String?                       @db.Uuid
   role                 ClientRole                    @default(CLIENT_MEMBER)
   status               MembershipStatus              @default(INVITED)
   tenant               Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   user                 User                          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  requestedProject     Project?                      @relation("RequestedProject", fields: [requestedProjectId, tenantId], references: [id, tenantId], onDelete: Restrict)
   workspaceMemberships WorkspaceMembership[]         @relation("ClientWorkspaceMembership")
   projectMemberships   ProjectMembership[]           @relation("ClientProjectMembership")
   projectPermissions   ProjectFunctionalPermission[] @relation("ClientProjectPermissions")
@@ -159,6 +161,7 @@ model ClientMembership {
   @@unique([id, tenantId])
   @@index([userId, status])
   @@index([tenantId, role, status])
+  @@index([tenantId, requestedProjectId, status])
 }
 
 model Workspace {
@@ -238,6 +241,7 @@ model Project {
   description        String?                       @db.VarChar(500)
   status             RecordStatus                  @default(ACTIVE)
   memberships        ProjectMembership[]
+  accessRequests     ClientMembership[]            @relation("RequestedProject")
   permissions        ProjectFunctionalPermission[]
   personaUsage       ProjectPersonaUsage[]
   questionnaireUsage ProjectQuestionnaireUsage[]

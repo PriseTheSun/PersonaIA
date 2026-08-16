@@ -37,6 +37,7 @@ const canonicalAuthContextSchema = z.object({
   tenantSlug: z.string().optional(),
   clientRole: clientRoleSchema.optional(),
   status: membershipStatusSchema.default('ACTIVE'),
+  hasProjectAccess: z.boolean().optional(),
   workspaces: z.array(z.object({
     id: z.string().min(1),
     name: z.string().min(1),
@@ -51,6 +52,7 @@ const backendAuthContextSchema = z.object({
   role: clientRoleSchema,
   status: membershipStatusSchema.default('ACTIVE'),
   selected: z.boolean().optional(),
+  hasProjectAccess: z.boolean().optional(),
   tenant: z.object({ id: z.string(), name: z.string(), slug: z.string().optional(), status: z.string().optional() }),
   workspaces: z.array(z.object({
     workspaceId: z.string().min(1),
@@ -67,6 +69,7 @@ export const authContextSchema = z.union([canonicalAuthContextSchema, backendAut
   tenantSlug: context.tenant.slug,
   clientRole: context.role,
   status: context.status,
+  hasProjectAccess: context.hasProjectAccess,
   workspaces: context.workspaces.map((item) => ({
     id: item.workspaceId,
     name: item.workspace.name,
@@ -128,6 +131,10 @@ export const projectSchema = z.object({
   workspace: z.object({ id: z.string(), name: z.string() }).nullable().optional(),
   status: z.enum(['ACTIVE', 'ARCHIVED']).default('ACTIVE'),
   memberCount: z.number().int().nonnegative().default(0),
+  accessCode: z.object({
+    code: z.string().length(12),
+    expiresAt: z.string().datetime(),
+  }).optional(),
   updatedAt: z.string(),
 });
 export type Project = z.infer<typeof projectSchema>;
@@ -163,6 +170,11 @@ export const clientMembershipSchema = z.object({
   role: clientRoleSchema,
   status: membershipStatusSchema,
   user: userSchema,
+  requestedProject: z.object({
+    id: z.string().min(1),
+    name: z.string().min(1),
+    status: z.string(),
+  }).nullable().optional(),
   workspaceCount: z.number().int().nonnegative().default(0),
   createdAt: z.string().optional(),
   updatedAt: z.string().optional(),
@@ -291,6 +303,7 @@ export const registerSchema = z.object({
   name: z.string().trim().min(2, 'forms.validation.name').max(120),
   email: z.string().trim().email('validation.email').max(254),
   tenantSlug: z.string().trim().toLowerCase().min(2, 'forms.validation.slug').max(80).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'forms.validation.slug'),
+  projectCode: z.string().trim().toUpperCase().refine((value) => value === '' || /^[A-HJ-NP-Z2-9]{12}$/.test(value), 'registration.invalidProjectCodeFormat').optional(),
   password: strongPassword,
   confirmPassword: z.string().min(1, 'validation.required'),
 }).strict().refine((value) => value.password === value.confirmPassword, {

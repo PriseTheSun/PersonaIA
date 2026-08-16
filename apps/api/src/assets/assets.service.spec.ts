@@ -43,7 +43,7 @@ describe('AssetsService questionnaire questions', () => {
     expect(tx.questionnaireQuestion.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         tenantId, questionnaireId, position: 2,
-        options: { create: [{ tenantId, label: 'Aplicativo', position: 0 }, { tenantId, label: 'Site', position: 1 }] },
+        options: { create: [{ label: 'Aplicativo', position: 0 }, { label: 'Site', position: 1 }] },
       }),
     }));
     expect(tx.questionnaire.update).toHaveBeenCalledWith(expect.objectContaining({ data: { version: { increment: 1 } } }));

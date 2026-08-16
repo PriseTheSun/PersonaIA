@@ -6,6 +6,7 @@ import * as argon2 from 'argon2';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ProjectAccessCodeService } from '../projects/project-access-code.service';
 import { hashToken, normalizeEmail, redactUser } from '../common/security';
 import { LoginInput, RegisterInput } from './auth.schemas';
 
@@ -21,6 +22,7 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     private readonly notifications: NotificationsService,
+    private readonly projectCodes: ProjectAccessCodeService,
   ) {}
 
   async register(input: RegisterInput) {
@@ -29,6 +31,9 @@ export class AuthService {
       select: { id: true, name: true }
     });
     if (!tenant) throw new BadRequestException({ code: 'INVALID_TENANT', message: 'Código da organização inválido.' });
+    const requestedProject = input.projectCode
+      ? await this.projectCodes.resolveProject(tenant.id, input.projectCode)
+      : null;
 
     const userName = input.name.trim();
     const userEmail = normalizeEmail(input.email);
@@ -74,6 +79,7 @@ export class AuthService {
           data: {
             tenantId: tenant.id,
             userId: user.id,
+            requestedProjectId: requestedProject?.id,
             role: ClientRole.CLIENT_MEMBER,
             status: MembershipStatus.PENDING_APPROVAL,
           },
@@ -81,7 +87,16 @@ export class AuthService {
       } else if (existingMembership.status === MembershipStatus.REMOVED) {
         await tx.clientMembership.update({
           where: { id: existingMembership.id },
-          data: { status: MembershipStatus.PENDING_APPROVAL },
+          data: { status: MembershipStatus.PENDING_APPROVAL, requestedProjectId: requestedProject?.id ?? null },
+        });
+      } else if (
+        existingMembership.status === MembershipStatus.PENDING_APPROVAL
+        && requestedProject
+        && existingMembership.requestedProjectId !== requestedProject.id
+      ) {
+        await tx.clientMembership.update({
+          where: { id: existingMembership.id },
+          data: { requestedProjectId: requestedProject.id },
         });
       } else {
         return;
@@ -95,7 +110,10 @@ export class AuthService {
           targetId: user.id,
           scopeType: 'TENANT',
           scopeId: tenant.id,
-          metadata: { source: 'SELF_REGISTRATION' }
+          metadata: {
+            source: 'SELF_REGISTRATION',
+            requestedProjectId: requestedProject?.id ?? null,
+          }
         }
       });
       await this.notifications.dispatchAccessRequest(tx, {
@@ -104,6 +122,10 @@ export class AuthService {
         userEmail,
         tenantId: tenant.id,
         tenantName: tenant.name,
+        ...(requestedProject ? {
+          requestedProjectId: requestedProject.id,
+          requestedProjectName: requestedProject.name,
+        } : {}),
       });
     });
     try {
@@ -153,6 +175,22 @@ export class AuthService {
       where: { id: user.id },
       data: { lastLoginAt: new Date(), tenantId: selectedTenantId, role: compatibilityRole },
     });
+    if (selectedMembership && selectedMembership.role !== ClientRole.CLIENT_ADMIN) {
+      const hasProjectAccess = await this.hasProjectAccess(user.id, selectedMembership.tenantId);
+      if (!hasProjectAccess) {
+        const tenant = await this.prisma.tenant.findUnique({
+          where: { id: selectedMembership.tenantId },
+          select: { name: true },
+        });
+        if (tenant) await this.notifications.dispatchMissingProjectAccess({
+          userId: user.id,
+          userName: user.name,
+          userEmail: user.email,
+          tenantId: selectedMembership.tenantId,
+          tenantName: tenant.name,
+        });
+      }
+    }
     const tokens = await this.issueSession(currentUser, context, input.rememberMe === true);
     return { ...tokens, user: redactUser(currentUser) };
   }
@@ -306,5 +344,41 @@ export class AuthService {
       this.prisma.refreshSession.updateMany({ where: { familyId, revokedAt: null }, data: { revokedAt: new Date() } }),
       this.prisma.user.update({ where: { id: userId }, data: { tokenVersion: { increment: 1 } } })
     ]);
+  }
+
+  private async hasProjectAccess(userId: string, tenantId: string) {
+    const [directMemberships, projectPermissions, workspaceProjects] = await Promise.all([
+      this.prisma.projectMembership.count({
+        where: {
+          tenantId, userId,
+          project: { status: RecordStatus.ACTIVE },
+          clientMembership: { status: MembershipStatus.ACTIVE },
+        },
+      }),
+      this.prisma.projectFunctionalPermission.count({
+        where: {
+          tenantId, userId, effect: 'ALLOW',
+          project: { status: RecordStatus.ACTIVE },
+          membership: { status: MembershipStatus.ACTIVE },
+        },
+      }),
+      this.prisma.project.count({
+        where: {
+          tenantId,
+          status: RecordStatus.ACTIVE,
+          workspace: {
+            status: RecordStatus.ACTIVE,
+            memberships: {
+              some: {
+                userId,
+                status: MembershipStatus.ACTIVE,
+                clientMembership: { status: MembershipStatus.ACTIVE },
+              },
+            },
+          },
+        },
+      }),
+    ]);
+    return directMemberships > 0 || projectPermissions > 0 || workspaceProjects > 0;
   }
 }

@@ -7,6 +7,8 @@ import { AccessControlService } from '../common/access-control.service';
 import { normalizeSlug } from '../common/security';
 import { Principal } from '../common/types/principal';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { ProjectAccessCodeService } from './project-access-code.service';
 import {
   AddMemberInput, CreateProjectInput, MoveMemberInput, ProjectQuery,
   ReplaceProjectPermissionsInput, UpdatePermissionInput, UpdateProjectInput,
@@ -14,7 +16,12 @@ import {
 
 @Injectable()
 export class ProjectsService {
-  constructor(private readonly prisma: PrismaService, @Optional() private readonly access?: AccessControlService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly access?: AccessControlService,
+    @Optional() private readonly projectCodes?: ProjectAccessCodeService,
+    @Optional() private readonly notifications?: NotificationsService,
+  ) {}
 
   async list(actor: Principal, query: ProjectQuery = {}) {
     const where: Prisma.ProjectWhereInput = { status: { not: RecordStatus.REMOVED } };
@@ -57,7 +64,24 @@ export class ProjectsService {
       },
       orderBy: { createdAt: 'desc' },
     });
-    return projects.map(({ _count, ...project }) => ({ ...project, memberCount: _count.memberships }));
+    const codeTenantIds = this.projectCodes && !this.accessControl().isSuper(actor)
+      ? new Set((await this.prisma.clientMembership.findMany({
+          where: {
+            userId: actor.id,
+            tenantId: { in: [...new Set(projects.map(({ tenantId }) => tenantId))] },
+            role: ClientRole.CLIENT_ADMIN,
+            status: MembershipStatus.ACTIVE,
+          },
+          select: { tenantId: true },
+        })).map(({ tenantId }) => tenantId))
+      : null;
+    return projects.map(({ _count, ...project }) => ({
+      ...project,
+      memberCount: _count.memberships,
+      ...(this.projectCodes && (this.accessControl().isSuper(actor) || codeTenantIds?.has(project.tenantId))
+        ? { accessCode: this.projectCodes.current(project.id) }
+        : {}),
+    }));
   }
 
   async get(id: string, actor: Principal) {
@@ -69,6 +93,12 @@ export class ProjectsService {
     if (!project) throw new NotFoundException('Projeto não encontrado.');
     const { _count, ...data } = project;
     return { ...data, memberCount: _count.memberships };
+  }
+
+  async accessCode(id: string, actor: Principal) {
+    const project = await this.accessControl().requireProject(actor, id, true);
+    if (!this.projectCodes) throw new Error('ProjectAccessCodeService não disponível.');
+    return { projectId: project.id, ...this.projectCodes.current(project.id) };
   }
 
   async create(input: CreateProjectInput, actor: Principal) {
@@ -106,7 +136,10 @@ export class ProjectsService {
             scopeType: 'PROJECT', scopeId: project.id, metadata: { workspaceId: workspace?.id ?? null },
           },
         });
-        return project;
+        return {
+          ...project,
+          ...(this.projectCodes ? { accessCode: this.projectCodes.current(project.id) } : {}),
+        };
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
@@ -245,6 +278,7 @@ export class ProjectsService {
             scopeType: 'PROJECT', scopeId: projectId, metadata: { userId: input.userId, permission: input.permission },
           },
         });
+        if (this.notifications) await this.notifications.resolveMissingProjectAccess(tx, input.userId, project.tenantId);
         return this.membershipDto(membership);
       });
     } catch (error) {

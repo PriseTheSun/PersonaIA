@@ -4,6 +4,7 @@ import { Principal } from '../common/types/principal';
 import { PrismaService } from '../prisma/prisma.service';
 
 export const ACCESS_REQUESTED_NOTIFICATION = 'ACCESS_REQUESTED';
+export const USER_LOGIN_WITHOUT_PROJECT_NOTIFICATION = 'USER_LOGIN_WITHOUT_PROJECT';
 
 type AccessRequestContext = {
   userId: string;
@@ -11,29 +12,18 @@ type AccessRequestContext = {
   userEmail: string;
   tenantId: string;
   tenantName: string;
+  requestedProjectId?: string;
+  requestedProjectName?: string;
 };
+
+type MissingProjectContext = Omit<AccessRequestContext, 'requestedProjectId' | 'requestedProjectName'>;
 
 @Injectable()
 export class NotificationsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async dispatchAccessRequest(tx: Prisma.TransactionClient, request: AccessRequestContext) {
-    const [superAdmins, clientAdmins] = await Promise.all([
-      tx.user.findMany({
-        where: { status: RecordStatus.ACTIVE, role: Role.SUPER_ADMIN },
-        select: { id: true },
-      }),
-      tx.clientMembership.findMany({
-        where: {
-          tenantId: request.tenantId,
-          role: ClientRole.CLIENT_ADMIN,
-          status: MembershipStatus.ACTIVE,
-          user: { status: RecordStatus.ACTIVE },
-        },
-        select: { userId: true },
-      }),
-    ]);
-    const recipientIds = [...new Set([...superAdmins.map(({ id }) => id), ...clientAdmins.map(({ userId }) => userId)])];
+    const recipientIds = await this.adminRecipientIds(tx, request.tenantId);
     if (recipientIds.length === 0) return;
 
     await tx.notification.createMany({
@@ -46,10 +36,60 @@ export class NotificationsService {
           userName: request.userName,
           userEmail: request.userEmail,
           tenantName: request.tenantName,
+          ...(request.requestedProjectId ? { requestedProjectId: request.requestedProjectId } : {}),
+          ...(request.requestedProjectName ? { requestedProjectName: request.requestedProjectName } : {}),
         },
       })),
       skipDuplicates: true,
     });
+  }
+
+  async dispatchMissingProjectAccess(request: MissingProjectContext) {
+    await this.prisma.$transaction(async (tx) => {
+      const recipientIds = await this.adminRecipientIds(tx, request.tenantId);
+      if (recipientIds.length === 0) return;
+      await tx.notification.createMany({
+        data: recipientIds.map((recipientId) => ({
+          recipientId,
+          tenantId: request.tenantId,
+          type: USER_LOGIN_WITHOUT_PROJECT_NOTIFICATION,
+          targetId: request.userId,
+          payload: {
+            userName: request.userName,
+            userEmail: request.userEmail,
+            tenantName: request.tenantName,
+          },
+        })),
+        skipDuplicates: true,
+      });
+    });
+  }
+
+  async resolveMissingProjectAccess(tx: Prisma.TransactionClient, targetId: string, tenantId: string) {
+    const now = new Date();
+    await tx.notification.updateMany({
+      where: { type: USER_LOGIN_WITHOUT_PROJECT_NOTIFICATION, targetId, tenantId, resolvedAt: null },
+      data: { resolvedAt: now, readAt: now },
+    });
+  }
+
+  private async adminRecipientIds(tx: Prisma.TransactionClient, tenantId: string) {
+    const [superAdmins, clientAdmins] = await Promise.all([
+      tx.user.findMany({
+        where: { status: RecordStatus.ACTIVE, role: Role.SUPER_ADMIN },
+        select: { id: true },
+      }),
+      tx.clientMembership.findMany({
+        where: {
+          tenantId,
+          role: ClientRole.CLIENT_ADMIN,
+          status: MembershipStatus.ACTIVE,
+          user: { status: RecordStatus.ACTIVE },
+        },
+        select: { userId: true },
+      }),
+    ]);
+    return [...new Set([...superAdmins.map(({ id }) => id), ...clientAdmins.map(({ userId }) => userId)])];
   }
 
   async resolveAccessRequest(tx: Prisma.TransactionClient, targetId: string, tenantId: string) {

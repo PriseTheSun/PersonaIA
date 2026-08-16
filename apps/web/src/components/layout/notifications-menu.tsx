@@ -1,4 +1,4 @@
-import { Bell, CheckCheck, UserRoundPlus } from 'lucide-react';
+import { Bell, CheckCheck, FolderClock, UserRoundPlus } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -122,13 +122,24 @@ export function NotificationsMenu() {
           <div className="max-h-96 overflow-y-auto p-1">
             {notifications.items.map((notification) => {
               const accessRequest = notification.type === 'ACCESS_REQUESTED';
-              const title = accessRequest ? t('notifications.accessRequestedTitle') : t('notifications.newActivity');
+              const missingProject = notification.type === 'USER_LOGIN_WITHOUT_PROJECT';
+              const requestedProjectName = payloadText(notification, 'requestedProjectName');
+              const title = accessRequest
+                ? t('notifications.accessRequestedTitle')
+                : missingProject ? t('notifications.missingProjectTitle') : t('notifications.newActivity');
               const description = accessRequest
-                ? t('notifications.accessRequestedDescription', {
+                ? t(requestedProjectName ? 'notifications.accessRequestedForProjectDescription' : 'notifications.accessRequestedDescription', {
                     userName: payloadText(notification, 'userName'),
                     userEmail: payloadText(notification, 'userEmail'),
                     tenantName: payloadText(notification, 'tenantName'),
+                    projectName: requestedProjectName,
                   })
+                : missingProject
+                  ? t('notifications.missingProjectDescription', {
+                      userName: payloadText(notification, 'userName'),
+                      userEmail: payloadText(notification, 'userEmail'),
+                      tenantName: payloadText(notification, 'tenantName'),
+                    })
                 : t('notifications.newActivityDescription');
               return (
                 <DropdownMenuItem
@@ -137,7 +148,7 @@ export function NotificationsMenu() {
                   onSelect={() => void openNotification(notification)}
                 >
                   <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full border border-primary/20 bg-primary/10 text-primary">
-                    {accessRequest ? <UserRoundPlus className="size-4" aria-hidden="true" /> : <Bell className="size-4" aria-hidden="true" />}
+                    {accessRequest ? <UserRoundPlus className="size-4" aria-hidden="true" /> : missingProject ? <FolderClock className="size-4" aria-hidden="true" /> : <Bell className="size-4" aria-hidden="true" />}
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex items-start justify-between gap-2">

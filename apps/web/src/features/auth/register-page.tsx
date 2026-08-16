@@ -1,5 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowLeft, ArrowRight, Clock3, LockKeyhole } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Clock3, KeyRound, LockKeyhole } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
@@ -25,21 +25,25 @@ export function RegisterPage() {
   const [serverError, setServerError] = useState<string | null>(null);
   const { register, handleSubmit, formState: { errors, isSubmitting } } = useForm<RegisterInput>({
     resolver: zodResolver(registerSchema),
-    defaultValues: { name: '', email: '', tenantSlug: '', password: '', confirmPassword: '' },
+    defaultValues: { name: '', email: '', tenantSlug: '', projectCode: '', password: '', confirmPassword: '' },
   });
 
   useEffect(() => { document.title = `${t('registration.title')} · ${t('common.appName')}`; }, [t]);
   if (auth.status === 'loading') return <main className="grid min-h-screen place-items-center"><Skeleton className="h-3 w-56" /></main>;
   if (auth.status === 'authenticated') return <Navigate to="/" replace />;
 
-  const onSubmit = handleSubmit(async ({ confirmPassword: _confirmPassword, ...input }) => {
+  const onSubmit = handleSubmit(async ({ confirmPassword: _confirmPassword, projectCode, ...input }) => {
     setServerError(null);
     try {
-      await apiRequest('/auth/register', responseSchema, { method: 'POST', body: input });
+      await apiRequest('/auth/register', responseSchema, {
+        method: 'POST',
+        body: { ...input, ...(projectCode ? { projectCode } : {}) },
+      });
       setComplete(true);
       toast.success(t('registration.requestSent'));
     } catch (error) {
       if (error instanceof ApiError && error.code === 'INVALID_TENANT') setServerError(t('registration.invalidTenant'));
+      else if (error instanceof ApiError && error.code === 'INVALID_PROJECT_CODE') setServerError(t('registration.invalidProjectCode'));
       else setServerError(error instanceof ApiError ? error.message : t('auth.genericError'));
     }
   });
@@ -70,6 +74,12 @@ export function RegisterPage() {
             </div>
             <Field id="register-tenant" label={t('registration.tenantCode')} error={errors.tenantSlug && t(errors.tenantSlug.message!)} hint={t('registration.tenantHint')}>
               <Input id="register-tenant" autoCapitalize="none" autoCorrect="off" placeholder={t('registration.tenantPlaceholder')} className="h-11" aria-invalid={Boolean(errors.tenantSlug)} {...register('tenantSlug')} />
+            </Field>
+            <Field id="register-project-code" label={t('registration.projectCode')} error={errors.projectCode && t(errors.projectCode.message!)} hint={t('registration.projectCodeHint')}>
+              <div className="relative">
+                <KeyRound className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                <Input id="register-project-code" autoCapitalize="characters" autoCorrect="off" maxLength={12} placeholder={t('registration.projectCodePlaceholder')} className="h-11 pl-10 font-mono uppercase tracking-[0.12em]" aria-invalid={Boolean(errors.projectCode)} {...register('projectCode')} />
+              </div>
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field id="register-password" label={t('common.password')} error={errors.password && t(errors.password.message!)}>

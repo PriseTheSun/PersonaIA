@@ -171,6 +171,9 @@ export class AssetsService {
       await this.access.lockTenant(tx, tenantId);
       await this.requireAssetTx(tx, 'QUESTIONNAIRE', tenantId, questionnaireId);
       const aggregate = await tx.questionnaireQuestion.aggregate({ where: { tenantId, questionnaireId }, _max: { position: true } });
+      const options: Prisma.QuestionnaireOptionCreateWithoutQuestionInput[] = input.type === 'MULTIPLE_CHOICE'
+        ? input.options.map((label, position) => ({ label, position }))
+        : [];
       const question = await tx.questionnaireQuestion.create({
         data: {
           tenantId,
@@ -179,7 +182,10 @@ export class AssetsService {
           type: input.type,
           position: (aggregate._max.position ?? -1) + 1,
           ...(input.type === 'MULTIPLE_CHOICE' ? {
-            options: { create: input.options.map((label, position) => ({ tenantId, label, position })) },
+            // In a nested create Prisma derives both questionId and tenantId
+            // from the composite parent relation. Supplying tenantId here is
+            // rejected by the generated checked input before reaching SQL.
+            options: { create: options },
           } : {}),
         },
         include: { options: { orderBy: { position: 'asc' } } },
