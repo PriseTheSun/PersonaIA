@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
-import { validateAvatarDataUrl } from './avatar-image';
+import { MAX_AVATAR_BYTES, validateAvatarDataUrl } from './avatar-image';
+import { updateAvatarSchema } from './preferences.schemas';
 
 const onePixelPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 
@@ -20,5 +21,21 @@ describe('avatar image validation', () => {
     const oversized = Buffer.from(onePixelPng, 'base64');
     oversized.writeUInt32BE(5000, 16);
     expect(() => validateAvatarDataUrl(`data:image/png;base64,${oversized.toString('base64')}`)).toThrow(BadRequestException);
+  });
+
+  it('accepts a valid PNG with exactly 5 MB', () => {
+    const atLimit = Buffer.alloc(MAX_AVATAR_BYTES);
+    Buffer.from(onePixelPng, 'base64').copy(atLimit);
+    const image = `data:image/png;base64,${atLimit.toString('base64')}`;
+
+    expect(updateAvatarSchema.safeParse({ image }).success).toBe(true);
+    expect(validateAvatarDataUrl(image).data).toHaveLength(MAX_AVATAR_BYTES);
+  });
+
+  it('rejects an image larger than 5 MB', () => {
+    const aboveLimit = Buffer.alloc(MAX_AVATAR_BYTES + 1);
+    Buffer.from(onePixelPng, 'base64').copy(aboveLimit);
+
+    expect(() => validateAvatarDataUrl(`data:image/png;base64,${aboveLimit.toString('base64')}`)).toThrow('A imagem deve ter no máximo 5 MB.');
   });
 });

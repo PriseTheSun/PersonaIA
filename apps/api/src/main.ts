@@ -17,6 +17,7 @@ async function bootstrap() {
     hsts: production ? { maxAge: 31_536_000, includeSubDomains: true, preload: true } : false,
     referrerPolicy: { policy: 'no-referrer' }
   }));
+  app.use('/api/v1/preferences/avatar', json({ limit: '7mb', strict: true }));
   app.use(json({ limit: '1mb', strict: true }));
   app.use(urlencoded({ extended: false, limit: '100kb' }));
   app.use(cookieParser());

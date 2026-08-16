@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { apiRequest, apiVoid, csrfHeaders } from '@/lib/api';
 
 const avatarResponseSchema = z.object({ hasAvatar: z.literal(true), avatarUpdatedAt: z.string().datetime() });
-const MAX_AVATAR_BYTES = 700 * 1024;
+const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
 const ACCEPTED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png']);
 
 function readAsDataUrl(file: File) {

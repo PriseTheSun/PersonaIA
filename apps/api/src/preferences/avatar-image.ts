@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 
-export const MAX_AVATAR_BYTES = 700 * 1024;
+export const MAX_AVATAR_BYTES = 5 * 1024 * 1024;
+export const MAX_AVATAR_DATA_URL_LENGTH = Math.ceil(MAX_AVATAR_BYTES / 3) * 4 + 'data:image/jpeg;base64,'.length;
 const MAX_DIMENSION = 4096;
 const MAX_PIXELS = 16_777_216;
 const JPEG_START_OF_FRAME = new Set([0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf]);
@@ -59,7 +60,7 @@ export function validateAvatarDataUrl(image: string): ValidatedAvatar {
   const data = Buffer.from(encoded, 'base64');
   if (data.length === 0 || data.toString('base64') !== encoded) throw invalidImage();
   if (data.length > MAX_AVATAR_BYTES) {
-    throw invalidImage('A imagem deve ter no máximo 700 KB.');
+    throw invalidImage('A imagem deve ter no máximo 5 MB.');
   }
   const dimensions = mimeType === 'image/png' ? pngDimensions(data) : jpegDimensions(data);
   validateDimensions(dimensions.width, dimensions.height);

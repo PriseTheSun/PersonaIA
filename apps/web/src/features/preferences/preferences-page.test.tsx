@@ -57,6 +57,17 @@ describe('PreferencesPage', () => {
     expect(apiRequest).not.toHaveBeenCalled();
   });
 
+  it('rejects images larger than 5 MB before calling the API', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const oversizedImage = new File([new Uint8Array(5 * 1024 * 1024 + 1)], 'avatar.png', { type: 'image/png' });
+
+    await user.upload(screen.getByLabelText('Escolher foto'), oversizedImage);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('A imagem deve ter no máximo 5 MB.');
+    expect(apiRequest).not.toHaveBeenCalled();
+  });
+
   it('blocks mismatched password confirmation on the client', async () => {
     const user = userEvent.setup();
     renderPage();
