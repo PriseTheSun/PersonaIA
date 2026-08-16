@@ -14,7 +14,7 @@ const currentUserResponseSchema = z.union([
   if ('user' in value) return { ...value.user, contexts: value.contexts ?? value.user.contexts };
   return value;
 });
-const loginResponseSchema = z.object({ accessToken: z.string().min(1), user: userSchema.optional() });
+const loginResponseSchema = z.object({ accessToken: z.string().min(1), sessionExpiresAt: z.string().datetime(), user: userSchema.optional() });
 
 function readStoredScope(): ActiveScope | null {
   try {
@@ -42,23 +42,30 @@ function normalizeScope(user: User, requested: ActiveScope | null): ActiveScope 
 export function AuthProvider({ children }: PropsWithChildren) {
   const [state, setState] = useState<AuthState>({ status: 'loading', user: null });
   const [activeScope, setActiveScope] = useState<ActiveScope | null>(() => readStoredScope());
+  const [sessionExpiresAt, setSessionExpiresAt] = useState<string | null>(null);
 
   useEffect(() => {
-    setUnauthorizedHandler(() => setState({ status: 'anonymous', user: null }));
+    setUnauthorizedHandler(() => {
+      setSessionExpiresAt(null);
+      setState({ status: 'anonymous', user: null });
+    });
     return () => setUnauthorizedHandler(null);
   }, []);
 
   const refresh = useCallback(async () => {
     if (!getCsrfToken()) {
+      setSessionExpiresAt(null);
       setState({ status: 'anonymous', user: null });
       return;
     }
     try {
-      await restoreAccessToken();
+      const restored = await restoreAccessToken();
       const user = await apiRequest('/auth/me', currentUserResponseSchema);
+      setSessionExpiresAt(restored.sessionExpiresAt);
       setState({ status: 'authenticated', user });
       setActiveScope((current) => normalizeScope(user, current));
     } catch {
+      setSessionExpiresAt(null);
       setState({ status: 'anonymous', user: null });
     }
   }, []);
@@ -68,6 +75,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const login = useCallback(async (input: LoginInput) => {
     const response = await apiRequest('/auth/login', loginResponseSchema, { method: 'POST', body: input, headers: csrfHeaders() });
     setAccessToken(response.accessToken);
+    setSessionExpiresAt(response.sessionExpiresAt);
     const user = response.user && (response.user.role === 'SUPER_ADMIN' || response.user.contexts)
       ? response.user
       : await apiRequest('/auth/me', currentUserResponseSchema);
@@ -82,9 +90,21 @@ export function AuthProvider({ children }: PropsWithChildren) {
     } finally {
       setAccessToken(null);
       setScopeContext({});
+      setSessionExpiresAt(null);
       setState({ status: 'anonymous', user: null });
     }
   }, []);
+
+  useEffect(() => {
+    if (state.status !== 'authenticated' || !sessionExpiresAt) return;
+    const remainingMs = new Date(sessionExpiresAt).getTime() - Date.now();
+    if (!Number.isFinite(remainingMs) || remainingMs <= 0) {
+      void logout();
+      return;
+    }
+    const timeout = window.setTimeout(() => void logout(), remainingMs);
+    return () => window.clearTimeout(timeout);
+  }, [logout, sessionExpiresAt, state.status]);
 
   const selectScope = useCallback((scope: ActiveScope | null) => {
     if (state.status !== 'authenticated') return;

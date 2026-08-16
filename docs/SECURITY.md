@@ -94,6 +94,8 @@ IDs UUID/ULID reduzem enumeração, mas não são um controle de autorização.
   proteção CSRF é obrigatória.
 - Access token curto; refresh token com rotação, detecção de reutilização e
   revogação por família. Logout e troca de senha revogam sessões relevantes.
+- A sessão possui duração absoluta de 120 minutos a partir do login. A rotação
+  do refresh token preserva o prazo original e nunca prolonga a sessão.
 - JWT: algoritmo em allowlist, validação de `iss`, `aud`, `exp`, `nbf` e chave;
   rejeitar `alg=none`, confusão de algoritmo e `kid` não confiável.
 - Mensagens de login/recuperação não revelam se uma conta existe.

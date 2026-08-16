@@ -2,7 +2,8 @@ import { z } from 'zod';
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? '/api/v1';
 let accessToken: string | null = null;
-let refreshPromise: Promise<string> | null = null;
+type RefreshedSession = { accessToken: string; sessionExpiresAt: string };
+let refreshPromise: Promise<RefreshedSession> | null = null;
 let unauthorizedHandler: (() => void) | null = null;
 let scopeContext: { tenantId?: string; workspaceId?: string } = {};
 
@@ -47,18 +48,18 @@ async function refreshAccessToken() {
       .then(async (response) => {
         if (!response.ok) throw new ApiError(response.status, 'REFRESH_FAILED', response.statusText);
         const payload: unknown = await response.json();
-        const parsed = z.object({ accessToken: z.string().min(1) }).safeParse(payload);
+        const parsed = z.object({ accessToken: z.string().min(1), sessionExpiresAt: z.string().datetime() }).safeParse(payload);
         if (!parsed.success) throw new ApiError(502, 'INVALID_REFRESH_RESPONSE', 'The server returned an invalid refresh response.');
         accessToken = parsed.data.accessToken;
-        return parsed.data.accessToken;
+        return parsed.data;
       })
       .finally(() => { refreshPromise = null; });
   }
   return refreshPromise;
 }
 
-export async function restoreAccessToken(): Promise<void> {
-  await refreshAccessToken();
+export async function restoreAccessToken(): Promise<RefreshedSession> {
+  return refreshAccessToken();
 }
 
 async function fetchApi(path: string, options: RequestOptions, hasRetried = false): Promise<Response> {

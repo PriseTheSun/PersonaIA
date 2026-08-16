@@ -11,7 +11,7 @@ const environmentSchema = z.object({
   JWT_ISSUER: z.string().min(3).max(100).default('personaia-api'),
   JWT_AUDIENCE: z.string().min(3).max(100).default('personaia-web'),
   JWT_ACCESS_TTL: z.string().regex(durationPattern).default('15m'),
-  JWT_REFRESH_TTL_DAYS: z.coerce.number().int().min(1).max(30).default(7),
+  SESSION_TTL_MINUTES: z.coerce.number().int().min(5).max(1_440).default(120),
   CORS_ORIGINS: z.string().min(1),
   COOKIE_SECURE: z.enum(['true', 'false']).default('false'),
   TRUST_PROXY: z.enum(['true', 'false']).default('false'),

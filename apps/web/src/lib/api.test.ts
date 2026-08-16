@@ -11,12 +11,14 @@ function jsonResponse(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), { status, headers: { 'Content-Type': 'application/json' } });
 }
 
+const sessionExpiresAt = '2026-08-16T01:00:00.000Z';
+
 describe('secure API client', () => {
   it('refreshes once after a 401 and keeps the access token out of storage', async () => {
     vi.resetModules();
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse({ message: 'Unauthorized' }, 401))
-      .mockResolvedValueOnce(jsonResponse({ accessToken: 'memory-only-token' }))
+      .mockResolvedValueOnce(jsonResponse({ accessToken: 'memory-only-token', sessionExpiresAt }))
       .mockResolvedValueOnce(jsonResponse({ ok: true }));
     vi.stubGlobal('fetch', fetchMock);
     const { apiRequest } = await import('./api');
@@ -30,12 +32,12 @@ describe('secure API client', () => {
   it('restores the in-memory access token before loading the current user', async () => {
     vi.resetModules();
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(jsonResponse({ accessToken: 'restored-token' }))
+      .mockResolvedValueOnce(jsonResponse({ accessToken: 'restored-token', sessionExpiresAt }))
       .mockResolvedValueOnce(jsonResponse({ id: 'user-1' }));
     vi.stubGlobal('fetch', fetchMock);
     const { apiRequest, restoreAccessToken } = await import('./api');
 
-    await restoreAccessToken();
+    await expect(restoreAccessToken()).resolves.toEqual({ accessToken: 'restored-token', sessionExpiresAt });
     await apiRequest('/auth/me', z.object({ id: z.string() }));
 
     expect(fetchMock.mock.calls[0]?.[0]).toContain('/auth/refresh');

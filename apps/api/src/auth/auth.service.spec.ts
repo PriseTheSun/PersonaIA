@@ -87,3 +87,78 @@ describe('AuthService account approval', () => {
     }
   });
 });
+
+describe('AuthService 120-minute absolute session lifetime', () => {
+  const startedAt = new Date('2026-08-15T20:00:00.000Z');
+  const expiresAt = new Date('2026-08-15T22:00:00.000Z');
+  const user = {
+    id: '30000000-0000-4000-8000-000000000003', tenantId: null, name: 'Admin', email: 'admin@personaia.test',
+    role: 'SUPER_ADMIN', status: 'ACTIVE', tokenVersion: 0, clientMemberships: [],
+  };
+  const configValues: Record<string, string | number> = {
+    JWT_ACCESS_SECRET: 'access-secret-that-is-long-enough-for-tests',
+    JWT_REFRESH_SECRET: 'refresh-secret-that-is-long-enough-for-tests',
+    JWT_ISSUER: 'personaia-api',
+    JWT_AUDIENCE: 'personaia-web',
+    JWT_ACCESS_TTL: '15m',
+    SESSION_TTL_MINUTES: 120,
+  };
+
+  beforeEach(() => jest.useFakeTimers().setSystemTime(startedAt));
+  afterEach(() => jest.useRealTimers());
+
+  it('creates a session that expires exactly 120 minutes after login', async () => {
+    const passwordHash = await argon2.hash('UmaSenha#MuitoForte2026', { type: argon2.argon2id });
+    const refreshSessionCreate = jest.fn().mockResolvedValue({});
+    const prisma = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ ...user, passwordHash }),
+        update: jest.fn().mockResolvedValue(user),
+      },
+      refreshSession: { create: refreshSessionCreate },
+    };
+    const jwt = { signAsync: jest.fn().mockResolvedValueOnce('refresh-token').mockResolvedValueOnce('access-token') };
+    const config = { getOrThrow: jest.fn((key: string) => configValues[key]) };
+    const service = new AuthService(prisma as never, jwt as never, config as never, {} as never);
+
+    const result = await service.login({ email: user.email, password: 'UmaSenha#MuitoForte2026', rememberMe: true }, {});
+
+    expect(result.sessionExpiresAt).toBe(expiresAt.toISOString());
+    expect(refreshSessionCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ expiresAt }) }));
+    expect(jwt.signAsync.mock.calls[0]?.[1]).toEqual(expect.objectContaining({ expiresIn: 7_200 }));
+    expect(jwt.signAsync.mock.calls[1]?.[1]).toEqual(expect.objectContaining({ expiresIn: 900 }));
+  });
+
+  it('preserves the original deadline when the refresh token rotates', async () => {
+    jest.setSystemTime(new Date('2026-08-15T20:30:00.000Z'));
+    const rotatedSessionCreate = jest.fn().mockResolvedValue({});
+    const tx = {
+      refreshSession: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        create: rotatedSessionCreate,
+      },
+    };
+    const prisma = {
+      refreshSession: { findUnique: jest.fn().mockResolvedValue({
+        id: '10000000-0000-4000-8000-000000000001', familyId: '20000000-0000-4000-8000-000000000002', userId: user.id,
+        revokedAt: null, createdAt: startedAt, expiresAt, user,
+      }) },
+      $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx)),
+    };
+    const jwt = {
+      verifyAsync: jest.fn().mockResolvedValue({
+        sub: user.id, sid: '10000000-0000-4000-8000-000000000001', fid: '20000000-0000-4000-8000-000000000002', type: 'refresh', ver: 0, rem: true,
+      }),
+      signAsync: jest.fn().mockResolvedValueOnce('rotated-refresh-token').mockResolvedValueOnce('rotated-access-token'),
+    };
+    const config = { getOrThrow: jest.fn((key: string) => configValues[key]) };
+    const service = new AuthService(prisma as never, jwt as never, config as never, {} as never);
+
+    const result = await service.refresh('refresh-token', {});
+
+    expect(result.sessionExpiresAt).toBe(expiresAt.toISOString());
+    expect(rotatedSessionCreate).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ expiresAt }) }));
+    expect(jwt.signAsync.mock.calls[0]?.[1]).toEqual(expect.objectContaining({ expiresIn: 5_400 }));
+    expect(jwt.signAsync.mock.calls[1]?.[1]).toEqual(expect.objectContaining({ expiresIn: 900 }));
+  });
+});

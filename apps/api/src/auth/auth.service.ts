@@ -182,9 +182,14 @@ export class AuthService {
       throw new UnauthorizedException('Sessão inválida ou expirada.');
     }
     const user = session.user;
-    if (session.revokedAt || session.expiresAt <= new Date() || user.tokenVersion !== payload.ver) {
+    if (session.revokedAt || user.tokenVersion !== payload.ver) {
       await this.revokeFamily(session.familyId, user.id);
       throw new UnauthorizedException('Reutilização de sessão detectada. Faça login novamente.');
+    }
+    const sessionExpiresAt = this.cappedSessionExpiry(session.createdAt, session.expiresAt);
+    if (sessionExpiresAt <= new Date()) {
+      await this.revokeFamily(session.familyId, user.id);
+      throw new UnauthorizedException('Sessão inválida ou expirada.');
     }
     if (user.status !== RecordStatus.ACTIVE || (user.role !== Role.SUPER_ADMIN && user.clientMemberships.length === 0)) {
       await this.revokeFamily(session.familyId, user.id);
@@ -193,8 +198,7 @@ export class AuthService {
 
     const nextId = randomUUID();
     const rememberMe = payload.rem === true;
-    const refreshToken = await this.signRefresh(user.id, nextId, session.familyId, user.tokenVersion, rememberMe);
-    const expiresAt = this.refreshExpiry();
+    const refreshToken = await this.signRefresh(user.id, nextId, session.familyId, user.tokenVersion, rememberMe, sessionExpiresAt);
     const rotated = await this.prisma.$transaction(async (tx) => {
       const consumed = await tx.refreshSession.updateMany({
         where: { id: session.id, revokedAt: null },
@@ -203,7 +207,7 @@ export class AuthService {
       if (consumed.count !== 1) return false;
       await tx.refreshSession.create({
         data: {
-          id: nextId, userId: user.id, familyId: session.familyId, tokenHash: hashToken(refreshToken), expiresAt,
+          id: nextId, userId: user.id, familyId: session.familyId, tokenHash: hashToken(refreshToken), expiresAt: sessionExpiresAt,
           userAgent: context.userAgent?.slice(0, 300), ipAddress: context.ipAddress?.slice(0, 64)
         }
       });
@@ -213,7 +217,13 @@ export class AuthService {
       await this.revokeFamily(session.familyId, user.id);
       throw new UnauthorizedException('Reutilização de sessão detectada. Faça login novamente.');
     }
-    return { accessToken: await this.signAccess(user), refreshToken, expiresIn: this.config.getOrThrow<string>('JWT_ACCESS_TTL'), rememberMe };
+    return {
+      accessToken: await this.signAccess(user, sessionExpiresAt),
+      refreshToken,
+      expiresIn: this.config.getOrThrow<string>('JWT_ACCESS_TTL'),
+      sessionExpiresAt: sessionExpiresAt.toISOString(),
+      rememberMe,
+    };
   }
 
   async logout(rawToken?: string) {
@@ -224,38 +234,71 @@ export class AuthService {
   private async issueSession(user: { id: string; tokenVersion: number; tenantId: string | null; role: string }, context: SessionContext, rememberMe: boolean) {
     const id = randomUUID();
     const familyId = randomUUID();
-    const refreshToken = await this.signRefresh(user.id, id, familyId, user.tokenVersion, rememberMe);
+    const sessionExpiresAt = this.sessionExpiry();
+    const refreshToken = await this.signRefresh(user.id, id, familyId, user.tokenVersion, rememberMe, sessionExpiresAt);
     await this.prisma.refreshSession.create({
       data: {
-        id, familyId, userId: user.id, tokenHash: hashToken(refreshToken), expiresAt: this.refreshExpiry(),
+        id, familyId, userId: user.id, tokenHash: hashToken(refreshToken), expiresAt: sessionExpiresAt,
         userAgent: context.userAgent?.slice(0, 300), ipAddress: context.ipAddress?.slice(0, 64)
       }
     });
-    return { accessToken: await this.signAccess(user), refreshToken, expiresIn: this.config.getOrThrow<string>('JWT_ACCESS_TTL'), rememberMe };
+    return {
+      accessToken: await this.signAccess(user, sessionExpiresAt),
+      refreshToken,
+      expiresIn: this.config.getOrThrow<string>('JWT_ACCESS_TTL'),
+      sessionExpiresAt: sessionExpiresAt.toISOString(),
+      rememberMe,
+    };
   }
 
-  private signAccess(user: { id: string; tokenVersion: number; tenantId: string | null; role: string }) {
+  private signAccess(user: { id: string; tokenVersion: number; tenantId: string | null; role: string }, sessionExpiresAt: Date) {
     return this.jwt.signAsync(
-      { sub: user.id, type: 'access', ver: user.tokenVersion, tid: user.tenantId, role: user.role },
+      { sub: user.id, type: 'access', ver: user.tokenVersion, tid: user.tenantId, role: user.role, sessionExpiresAt: sessionExpiresAt.toISOString() },
       {
-        secret: this.config.getOrThrow('JWT_ACCESS_SECRET'), algorithm: 'HS256', expiresIn: this.config.getOrThrow('JWT_ACCESS_TTL') as never,
+        secret: this.config.getOrThrow('JWT_ACCESS_SECRET'), algorithm: 'HS256', expiresIn: this.accessTokenLifetimeSeconds(sessionExpiresAt),
         issuer: this.config.getOrThrow('JWT_ISSUER'), audience: this.config.getOrThrow('JWT_AUDIENCE')
       }
     );
   }
 
-  private signRefresh(userId: string, sessionId: string, familyId: string, version: number, rememberMe: boolean) {
+  private signRefresh(userId: string, sessionId: string, familyId: string, version: number, rememberMe: boolean, sessionExpiresAt: Date) {
     return this.jwt.signAsync(
       { sub: userId, sid: sessionId, fid: familyId, type: 'refresh', ver: version, rem: rememberMe },
       {
-        secret: this.config.getOrThrow('JWT_REFRESH_SECRET'), algorithm: 'HS256', expiresIn: `${this.config.getOrThrow<number>('JWT_REFRESH_TTL_DAYS')}d` as never,
+        secret: this.config.getOrThrow('JWT_REFRESH_SECRET'), algorithm: 'HS256', expiresIn: this.remainingSessionSeconds(sessionExpiresAt),
         issuer: this.config.getOrThrow('JWT_ISSUER'), audience: this.config.getOrThrow('JWT_AUDIENCE')
       }
     );
   }
 
-  private refreshExpiry() {
-    return new Date(Date.now() + this.config.getOrThrow<number>('JWT_REFRESH_TTL_DAYS') * 86_400_000);
+  private sessionExpiry() {
+    return new Date(Date.now() + this.sessionTtlMs());
+  }
+
+  private cappedSessionExpiry(createdAt: Date, storedExpiresAt: Date) {
+    const configuredExpiry = new Date(createdAt.getTime() + this.sessionTtlMs());
+    return configuredExpiry < storedExpiresAt ? configuredExpiry : storedExpiresAt;
+  }
+
+  private sessionTtlMs() {
+    return this.config.getOrThrow<number>('SESSION_TTL_MINUTES') * 60_000;
+  }
+
+  private remainingSessionSeconds(sessionExpiresAt: Date) {
+    return Math.max(1, Math.ceil((sessionExpiresAt.getTime() - Date.now()) / 1_000));
+  }
+
+  private accessTokenLifetimeSeconds(sessionExpiresAt: Date) {
+    const accessTtl = this.durationSeconds(this.config.getOrThrow<string>('JWT_ACCESS_TTL'));
+    return Math.min(accessTtl, this.remainingSessionSeconds(sessionExpiresAt));
+  }
+
+  private durationSeconds(duration: string) {
+    const match = /^(\d+)(s|m|h|d)$/.exec(duration);
+    if (!match) throw new Error('JWT_ACCESS_TTL inválido.');
+    const value = Number(match[1]);
+    const multipliers = { s: 1, m: 60, h: 3_600, d: 86_400 } as const;
+    return value * multipliers[match[2] as keyof typeof multipliers];
   }
 
   private async revokeFamily(familyId: string, userId: string) {

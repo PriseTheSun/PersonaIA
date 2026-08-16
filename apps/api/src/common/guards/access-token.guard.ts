@@ -9,7 +9,7 @@ import { Principal } from '../types/principal';
 import { AuthenticatedRequest } from '../types/request';
 import { PrismaService } from '../../prisma/prisma.service';
 
-interface AccessPayload { sub: string; type: 'access'; ver: number; iat?: number; exp?: number }
+interface AccessPayload { sub: string; type: 'access'; ver: number; sessionExpiresAt: string; iat?: number; exp?: number }
 
 @Injectable()
 export class AccessTokenGuard implements CanActivate {
@@ -32,7 +32,10 @@ export class AccessTokenGuard implements CanActivate {
         issuer: this.config.getOrThrow<string>('JWT_ISSUER'),
         audience: this.config.getOrThrow<string>('JWT_AUDIENCE')
       });
-      if (payload.type !== 'access') throw new Error('wrong token type');
+      const sessionExpiry = Date.parse(payload.sessionExpiresAt);
+      if (payload.type !== 'access' || !Number.isFinite(sessionExpiry) || sessionExpiry <= Date.now()) {
+        throw new Error('wrong token type or expired session');
+      }
       const user = await this.prisma.user.findFirst({
         where: { id: payload.sub, status: RecordStatus.ACTIVE },
         select: { id: true, tenantId: true, email: true, name: true, role: true, tokenVersion: true, avatarUpdatedAt: true }

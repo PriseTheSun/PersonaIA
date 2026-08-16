@@ -93,8 +93,8 @@ services:
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?Configure JWT_REFRESH_SECRET em .env}
       JWT_ISSUER: ${JWT_ISSUER:-personaia-api}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-personaia-web}
-      JWT_ACCESS_TTL: 15m
-      JWT_REFRESH_TTL_DAYS: 7
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      SESSION_TTL_MINUTES: ${SESSION_TTL_MINUTES:-120}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       TRUST_PROXY: ${TRUST_PROXY:-false}
