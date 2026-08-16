@@ -29,7 +29,7 @@ const workspaceResponseSchema = z.union([z.array(workspaceSchema), paginatedSche
 export function AssetsPage({ kind }: { kind: AssetKind }) {
   const { t } = useTranslation();
   const auth = useAuth();
-  const { tenantId, workspaceId } = useActiveScope();
+  const { tenantId, workspaceId, selectWorkspace } = useActiveScope();
   const [search, setSearch] = useState('');
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -56,6 +56,8 @@ export function AssetsPage({ kind }: { kind: AssetKind }) {
   const editing = items.find((asset) => asset.id === editingId);
   const building = kind === 'questionnaires' ? items.find((asset): asset is Questionnaire => asset.id === buildingId) : undefined;
   const labelKey = kind === 'personas' ? 'personas' : 'questionnaires';
+  const createsAtOrganizationLevel = kind === 'questionnaires' && isTenantAdmin;
+  const creationWorkspaceIds = createsAtOrganizationLevel ? [] : workspaceId ? [workspaceId] : [];
 
   useEffect(() => { document.title = `${t(`${labelKey}.title`)} · ${t('common.appName')}`; }, [labelKey, t]);
 
@@ -76,7 +78,7 @@ export function AssetsPage({ kind }: { kind: AssetKind }) {
   const Icon = kind === 'personas' ? ScanFace : ClipboardList;
   return (
     <div className="space-y-6">
-      <PageHeader title={t(`${labelKey}.title`)} description={t(`${labelKey}.description`)} action={<CreationDialog open={creating} onOpenChange={(open) => { setCreating(open); if (open) { setEditingId(null); setBuildingId(null); } }} title={t(`${labelKey}.createTitle`)} description={t(`${labelKey}.createDescription`)} trigger={<Button disabled={!tenantId || !canWrite}><Plus />{t(`${labelKey}.create`)}</Button>}>{tenantId ? <AssetForm path={`/tenants/${encodeURIComponent(tenantId)}/${kind}`} extraBody={{ workspaceIds: workspaceId ? [workspaceId] : [] }} submitLabel={t(`${labelKey}.create`)} onCancel={() => setCreating(false)} onSaved={() => { setCreating(false); toast.success(t('forms.created')); query.retry(); }} /> : null}</CreationDialog>} />
+      <PageHeader title={t(`${labelKey}.title`)} description={t(`${labelKey}.description`)} action={<CreationDialog open={creating} onOpenChange={(open) => { setCreating(open); if (open) { setEditingId(null); setBuildingId(null); } }} title={t(`${labelKey}.createTitle`)} description={t(`${labelKey}.createDescription`)} trigger={<Button disabled={!tenantId || !canWrite}><Plus />{t(`${labelKey}.create`)}</Button>}>{tenantId ? <AssetForm path={`/tenants/${encodeURIComponent(tenantId)}/${kind}`} extraBody={{ workspaceIds: creationWorkspaceIds }} submitLabel={t(`${labelKey}.create`)} onCancel={() => setCreating(false)} onSaved={() => { setCreating(false); toast.success(t('forms.created')); if (createsAtOrganizationLevel && workspaceId) selectWorkspace(''); else query.retry(); }} /> : null}</CreationDialog>} />
       <ScopeSelector />
       {editing && tenantId ? <FormDialog open onOpenChange={(open) => { if (!open) setEditingId(null); }} title={t(`${labelKey}.editTitle`, { name: editing.name })} description={t(`${labelKey}.editDescription`)}><AssetForm path={`/tenants/${encodeURIComponent(tenantId)}/${kind}/${encodeURIComponent(editing.id)}`} initial={{ name: editing.name, description: editing.description ?? '' }} submitLabel={t('common.save')} onCancel={() => setEditingId(null)} onSaved={() => { setEditingId(null); toast.success(t(`${labelKey}.updated`)); query.retry(); }} /></FormDialog> : null}
       {building && tenantId ? <QuestionnaireBuilderDialog open tenantId={tenantId} questionnaire={building} canWrite={canWrite} onOpenChange={(open) => { if (!open) setBuildingId(null); }} onChanged={query.retry} /> : null}

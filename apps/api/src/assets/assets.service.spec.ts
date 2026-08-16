@@ -10,6 +10,38 @@ describe('AssetsService questionnaire questions', () => {
     role: 'SUPER_ADMIN' as const, tokenVersion: 0,
   };
 
+  it('creates a questionnaire directly in the organization without a workspace', async () => {
+    const clientAdmin = { ...actor, role: 'PROJECT_USER' as const };
+    const questionnaire = {
+      id: questionnaireId, tenantId, name: 'Pesquisa sem pasta', description: null, data: {}, version: 1,
+    };
+    const tx = {
+      tenant: { count: jest.fn().mockResolvedValue(1) },
+      questionnaire: { create: jest.fn().mockResolvedValue(questionnaire) },
+      auditLog: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const prisma = {
+      clientMembership: { count: jest.fn().mockResolvedValue(1) },
+      $transaction: jest.fn(async (callback: (client: typeof tx) => Promise<unknown>) => callback(tx)),
+    };
+    const access = {
+      requireTenant: jest.fn().mockResolvedValue({ id: tenantId }),
+      isSuper: jest.fn().mockReturnValue(false),
+      lockTenant: jest.fn().mockResolvedValue(undefined),
+    };
+    const service = new AssetsService(prisma as never, access as never);
+
+    await expect(service.create('QUESTIONNAIRE', tenantId, {
+      name: 'Pesquisa sem pasta', data: {}, workspaceIds: [],
+    }, clientAdmin)).resolves.toEqual({ ...questionnaire, workspaceIds: [] });
+    expect(tx.questionnaire.create).toHaveBeenCalledWith({
+      data: { tenantId, name: 'Pesquisa sem pasta', description: undefined, data: {} },
+    });
+    expect(tx.auditLog.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ action: 'QUESTIONNAIRE_CREATED', metadata: { requestedWorkspaceIds: [] } }),
+    }));
+  });
+
   it('creates an ordered multiple-choice question inside the authorized organization', async () => {
     const created = {
       id: questionId, tenantId, questionnaireId, prompt: 'Qual canal?', type: 'MULTIPLE_CHOICE', position: 2,

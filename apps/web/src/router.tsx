@@ -39,7 +39,6 @@ export const router = createBrowserRouter([
             { element: <RoleGuard allow={['SUPER_ADMIN', 'CLIENT_ADMIN', 'WORKSPACE_ADMIN', 'WORKSPACE_MEMBER', 'PROJECT_USER']} />, children: [{ path: 'workspaces', element: <RouteLoading><WorkspacesPage /></RouteLoading> }, { path: 'projects', element: <RouteLoading><ProjectsPage /></RouteLoading> }, { path: 'personas', element: <RouteLoading><PersonasPage /></RouteLoading> }, { path: 'questionnaires', element: <RouteLoading><QuestionnairesPage /></RouteLoading> }] },
             { element: <RoleGuard allow={['SUPER_ADMIN', 'CLIENT_ADMIN', 'WORKSPACE_ADMIN']} />, children: [{ path: 'users', element: <RouteLoading><UsersPage /></RouteLoading> }, { path: 'permissions', element: <RouteLoading><PermissionsPage /></RouteLoading> }] },
             { element: <RoleGuard allow={['SUPER_ADMIN', 'CLIENT_ADMIN']} />, children: [{ path: 'access-control', element: <RouteLoading><AccessControlPage /></RouteLoading> }] },
-            { path: '*', element: <RouteLoading><NotFoundPage /></RouteLoading> },
           ],
         },
       ],

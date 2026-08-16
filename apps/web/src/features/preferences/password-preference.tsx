@@ -57,7 +57,7 @@ export function PasswordPreference() {
   );
 
   return (
-    <section className="rounded-lg border bg-card p-4 sm:p-6" aria-labelledby="password-title">
+    <section className="w-full rounded-lg border bg-card p-4 sm:p-6" aria-labelledby="password-title">
       <div className="flex items-start gap-3">
         <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-md bg-muted text-foreground"><KeyRound aria-hidden="true" className="size-4" /></span>
         <div>
