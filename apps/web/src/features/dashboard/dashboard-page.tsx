@@ -73,13 +73,13 @@ export function DashboardPage() {
       label: t('dashboard.pendingAccessRequests'),
       description: t('dashboard.pendingAccessRequestsDescription'),
       value: summary?.metrics.pendingAccessRequests,
-      href: tenantId ? `/access-control?tenant=${encodeURIComponent(tenantId)}&status=PENDING` : '/access-control?status=PENDING',
+      href: tenantId ? `/access-control?view=CLIENT&tenant=${encodeURIComponent(tenantId)}&status=PENDING` : '/access-control?view=PLATFORM&status=PENDING',
       attention: (summary?.metrics.pendingAccessRequests ?? 0) > 0,
     } satisfies DashboardMetric] : []),
   ];
   const metrics: DashboardMetric[] = adminMetrics;
 
-  const accessControlPath = tenantId ? `/access-control?tenant=${encodeURIComponent(tenantId)}&status=PENDING` : '/access-control?status=PENDING';
+  const accessControlPath = tenantId ? `/access-control?view=CLIENT&tenant=${encodeURIComponent(tenantId)}&status=PENDING` : '/access-control?view=PLATFORM&status=PENDING';
   const actions = isSuperAdmin
     ? [{ label: 'dashboard.reviewAccess', to: accessControlPath, icon: Clock3 }]
     : isWorkspaceMember ? [] : [

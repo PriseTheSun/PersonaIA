@@ -1,4 +1,5 @@
 import { Ban, CircleX, MoreHorizontal, RotateCcw, UserRoundCog } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Avatar } from '@/components/shared/avatar';
 import { DataRegion } from '@/components/shared/data-region';
@@ -99,20 +100,21 @@ function PlatformActions({ identity, disabled, onEdit }: { identity: PlatformIde
   );
 }
 
-export function PlatformAccessTable({ items, status, currentUserId, mutatingId, onRetry, onEdit }: {
+export function PlatformAccessTable({ items, status, toolbar, currentUserId, mutatingId, onRetry, onEdit }: {
   items: PlatformIdentity[];
   status: QueryStatus;
+  toolbar?: ReactNode;
   currentUserId: string;
   mutatingId: string | null;
   onRetry: () => void;
   onEdit: (id: string) => void;
 }) {
   const { t, i18n } = useTranslation();
-  if (status === 'loading') return <DataRegion><LoadingRows /></DataRegion>;
-  if (status === 'error') return <DataRegion><ErrorState onRetry={onRetry} /></DataRegion>;
-  if (items.length === 0) return <DataRegion><EmptyState title={t('accessControl.empty')} description={t('accessControl.platformEmptyDescription')} /></DataRegion>;
+  if (status === 'loading') return <DataRegion toolbar={toolbar}><LoadingRows /></DataRegion>;
+  if (status === 'error') return <DataRegion toolbar={toolbar}><ErrorState onRetry={onRetry} /></DataRegion>;
+  if (items.length === 0) return <DataRegion toolbar={toolbar}><EmptyState title={t('accessControl.empty')} description={t('accessControl.platformEmptyDescription')} /></DataRegion>;
   return (
-    <DataRegion>
+    <DataRegion toolbar={toolbar}>
       <div className="hidden md:block">
         <Table>
           <TableHeader><TableRow><TableHead>{t('accessControl.columns.identity')}</TableHead><TableHead>{t('accessControl.columns.globalRole')}</TableHead><TableHead>{t('common.status')}</TableHead><TableHead>{t('accessControl.columns.memberships')}</TableHead><TableHead>{t('accessControl.columns.created')}</TableHead><TableHead className="w-16 text-right"><span className="sr-only">{t('common.actions')}</span></TableHead></TableRow></TableHeader>

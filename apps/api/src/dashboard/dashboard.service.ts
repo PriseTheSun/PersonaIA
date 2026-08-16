@@ -105,9 +105,19 @@ export class DashboardService {
       : tenantId
         ? this.prisma.clientMembership.count({ where: { ...membershipWhere, status: MembershipStatus.ACTIVE } })
         : this.prisma.user.count({ where: { status: RecordStatus.ACTIVE } });
-    const pendingPromise = clientAdmin
-      ? this.prisma.clientMembership.count({ where: { ...membershipWhere, status: MembershipStatus.PENDING_APPROVAL } })
-      : Promise.resolve(0);
+    const pendingPromise = !clientAdmin
+      ? Promise.resolve(0)
+      : tenantId
+        ? this.prisma.clientMembership.count({ where: { ...membershipWhere, status: MembershipStatus.PENDING_APPROVAL } })
+        : Promise.all([
+            this.prisma.clientMembership.count({ where: { status: MembershipStatus.PENDING_APPROVAL } }),
+            this.prisma.user.count({
+              where: {
+                status: { in: [RecordStatus.PENDING, RecordStatus.PENDING_APPROVAL] },
+                clientMemberships: { none: { status: MembershipStatus.PENDING_APPROVAL } },
+              },
+            }),
+          ]).then(([scopedRequests, globalRequests]) => scopedRequests + globalRequests);
     const [projects, personas, activeUsers, pendingAccessRequests, recentActivity] = await Promise.all([
       this.prisma.project.findMany({ where: projectWhere, select: { createdAt: true } }),
       this.prisma.persona.findMany({ where: personaWhere, select: { createdAt: true } }),

@@ -76,6 +76,7 @@ describe('DashboardPage', () => {
     expect(within(indicators).getByText('Personas criadas')).toBeInTheDocument();
     expect(within(indicators).getByText('Usuários ativos')).toBeInTheDocument();
     expect(within(indicators).getByText('Pedidos aguardando aprovação')).toBeInTheDocument();
+    expect(within(indicators).getByRole('link', { name: 'Pedidos aguardando aprovação: 3' })).toHaveAttribute('href', '/access-control?view=PLATFORM&status=PENDING');
     expect(screen.getByText('Dados detalhados da evolução de projetos e personas.')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '12 meses' }));

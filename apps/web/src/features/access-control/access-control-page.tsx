@@ -42,7 +42,9 @@ export function AccessControlPage() {
   const { tenantId } = useActiveScope();
   const isSuperAdmin = auth.status === 'authenticated' && auth.user.role === 'SUPER_ADMIN';
   const [searchParams, setSearchParams] = useSearchParams();
-  const [view, setView] = useState<AccessView>(() => isSuperAdmin && searchParams.get('view') === 'PLATFORM' ? 'PLATFORM' : 'CLIENT');
+  const requestedView = searchParams.get('view');
+  const routeView: AccessView = isSuperAdmin && requestedView !== 'CLIENT' ? 'PLATFORM' : 'CLIENT';
+  const [view, setView] = useState<AccessView>(routeView);
   const [search, setSearch] = useState('');
   const requestedFilter = searchParams.get('status');
   const initialFilter = filters.includes(requestedFilter as Filter) ? requestedFilter as Filter : 'PENDING';
@@ -72,13 +74,27 @@ export function AccessControlPage() {
   }), [allItems, filter, i18n.language, search]);
   const editingMembership = allItems.find((membership) => membership.userId === editingId);
   const approvalMembership = allItems.find((membership) => membership.userId === approvalId);
-  const platformItems = platformQuery.status === 'success' ? platformQuery.data : [];
-  const editingPlatformIdentity = platformItems.find((identity) => identity.id === editingPlatformId);
+  const allPlatformItems = useMemo(() => platformQuery.status === 'success' ? platformQuery.data : [], [platformQuery]);
+  const platformCounts = useMemo(() => Object.fromEntries(filters.map((item) => [item, allPlatformItems.filter((identity) => matchesFilter(identity.status, item)).length])) as Record<Filter, number>, [allPlatformItems]);
+  const platformItems = useMemo(() => allPlatformItems.filter((identity) => {
+    const text = `${identity.name} ${identity.email}`.toLocaleLowerCase(i18n.language);
+    return matchesFilter(identity.status, filter) && text.includes(search.trim().toLocaleLowerCase(i18n.language));
+  }), [allPlatformItems, filter, i18n.language, search]);
+  const editingPlatformIdentity = allPlatformItems.find((identity) => identity.id === editingPlatformId);
+  const activeCounts = view === 'PLATFORM' ? platformCounts : counts;
 
   useEffect(() => { document.title = `${t('accessControl.title')} · ${t('common.appName')}`; }, [t]);
+  useEffect(() => { setView(routeView); }, [routeView]);
   useEffect(() => {
     if (filters.includes(requestedFilter as Filter)) setFilter(requestedFilter as Filter);
   }, [requestedFilter]);
+
+  const selectView = (nextView: AccessView) => {
+    setView(nextView);
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('view', nextView);
+    setSearchParams(nextParams, { replace: true });
+  };
 
   const selectFilter = (nextFilter: Filter) => {
     setFilter(nextFilter);
@@ -123,13 +139,27 @@ export function AccessControlPage() {
     }
   };
 
+  const toolbar = (
+    <div className="w-full space-y-3">
+      <SearchField value={search} onChange={setSearch} placeholder={t('accessControl.search')} />
+      <div className="flex gap-1 overflow-x-auto pb-0.5" role="group" aria-label={t('accessControl.filterLabel')}>
+        {filters.map((item) => (
+          <Button key={item} size="sm" variant={filter === item ? 'secondary' : 'ghost'} onClick={() => selectFilter(item)} aria-pressed={filter === item} className="shrink-0">
+            {t(`accessControl.filters.${item === 'REMOVED' ? 'ARCHIVED' : item}`)}
+            <span className="tabular-nums text-muted-foreground">{activeCounts[item]}</span>
+          </Button>
+        ))}
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       <PageHeader title={t('accessControl.title')} description={t(isSuperAdmin ? 'accessControl.superDescription' : 'accessControl.clientDescription')} />
       {isSuperAdmin ? (
         <div className="inline-flex max-w-full gap-1 overflow-x-auto rounded-lg border bg-card p-1" role="group" aria-label={t('accessControl.viewLabel')}>
-          <Button size="sm" variant={view === 'CLIENT' ? 'secondary' : 'ghost'} aria-pressed={view === 'CLIENT'} onClick={() => setView('CLIENT')}>{t('accessControl.clientAccess')}</Button>
-          <Button size="sm" variant={view === 'PLATFORM' ? 'secondary' : 'ghost'} aria-pressed={view === 'PLATFORM'} onClick={() => setView('PLATFORM')}>{t('accessControl.platformIdentities')}</Button>
+          <Button size="sm" variant={view === 'CLIENT' ? 'secondary' : 'ghost'} aria-pressed={view === 'CLIENT'} onClick={() => selectView('CLIENT')}>{t('accessControl.clientAccess')}</Button>
+          <Button size="sm" variant={view === 'PLATFORM' ? 'secondary' : 'ghost'} aria-pressed={view === 'PLATFORM'} onClick={() => selectView('PLATFORM')}>{t('accessControl.platformIdentities')}</Button>
         </div>
       ) : null}
       {view === 'CLIENT' ? <ScopeSelector includeWorkspace={false} /> : null}
@@ -188,24 +218,13 @@ export function AccessControlPage() {
         <PlatformAccessTable
           items={platformItems}
           status={platformQuery.status}
+          toolbar={toolbar}
           currentUserId={auth.status === 'authenticated' ? auth.user.id : ''}
           mutatingId={mutatingPlatformId}
           onRetry={platformQuery.retry}
           onEdit={setEditingPlatformId}
         />
-      ) : <DataRegion toolbar={
-        <div className="w-full space-y-3">
-          <SearchField value={search} onChange={setSearch} placeholder={t('accessControl.search')} />
-          <div className="flex gap-1 overflow-x-auto pb-0.5" role="group" aria-label={t('accessControl.filterLabel')}>
-            {filters.map((item) => (
-              <Button key={item} size="sm" variant={filter === item ? 'secondary' : 'ghost'} onClick={() => selectFilter(item)} aria-pressed={filter === item} className="shrink-0">
-                {t(`accessControl.filters.${item === 'REMOVED' ? 'ARCHIVED' : item}`)}
-                <span className="tabular-nums text-muted-foreground">{counts[item]}</span>
-              </Button>
-            ))}
-          </div>
-        </div>
-      }>
+      ) : <DataRegion toolbar={toolbar}>
         {!tenantId ? <EmptyState title={t('context.selectClient')} description={t('context.selectClientDescription')} />
           : query.status === 'loading' ? <LoadingRows />
             : query.status === 'error' ? <ErrorState onRetry={query.retry} />

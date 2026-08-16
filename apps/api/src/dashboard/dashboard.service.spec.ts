@@ -29,4 +29,26 @@ describe('DashboardService scoped metrics', () => {
     const service = new DashboardService({} as never, access as never);
     await expect(service.summary(actor, { range: '30d' })).rejects.toBeInstanceOf(ForbiddenException);
   });
+
+  it('includes registrations without an organization in the platform pending count', async () => {
+    const prisma = {
+      project: { findMany: jest.fn().mockResolvedValue([]) },
+      persona: { findMany: jest.fn().mockResolvedValue([]) },
+      clientMembership: { count: jest.fn().mockResolvedValue(3) },
+      user: { count: jest.fn(({ where }) => Promise.resolve(where.status === 'ACTIVE' ? 8 : 1)) },
+      auditLog: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const access = { isSuper: jest.fn().mockReturnValue(true) };
+    const service = new DashboardService(prisma as never, access as never);
+
+    const result = await service.summary({ ...actor, role: 'SUPER_ADMIN', tenantId: null }, { range: '30d' });
+
+    expect(result.metrics.pendingAccessRequests).toBe(4);
+    expect(prisma.user.count).toHaveBeenCalledWith({
+      where: {
+        status: { in: ['PENDING', 'PENDING_APPROVAL'] },
+        clientMemberships: { none: { status: 'PENDING_APPROVAL' } },
+      },
+    });
+  });
 });
