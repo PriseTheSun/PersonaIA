@@ -6,8 +6,9 @@ import { toast } from 'sonner';
 import { z } from 'zod';
 import { Avatar } from '@/components/shared/avatar';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
+import { CreationDialog } from '@/components/shared/creation-dialog';
 import { DataRegion } from '@/components/shared/data-region';
-import { InlineForm, MutationNotice } from '@/components/shared/inline-form';
+import { MutationNotice } from '@/components/shared/inline-form';
 import { PageHeader } from '@/components/shared/page-header';
 import { ScopeSelector } from '@/components/shared/scope-selector';
 import { SearchField } from '@/components/shared/search-field';
@@ -78,9 +79,8 @@ export function UsersPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t('users.title')} description={t('users.membershipDescription')} action={<Button onClick={() => setCreating(true)} disabled={!tenantId || Boolean(workspaceId && candidatesQuery.status !== 'success')}><Plus />{t('users.add')}</Button>} />
+      <PageHeader title={t('users.title')} description={t('users.membershipDescription')} action={<CreationDialog open={creating} onOpenChange={setCreating} title={t(workspaceId ? 'users.addWorkspaceTitle' : 'users.addClientTitle')} description={t(workspaceId ? 'users.addWorkspaceDescription' : 'users.addClientDescription')} trigger={<Button disabled={!tenantId || Boolean(workspaceId && candidatesQuery.status !== 'success')}><Plus />{t('users.add')}</Button>}>{tenantId && (!workspaceId || candidatesQuery.status === 'success') ? <MembershipForm tenantId={tenantId} workspaceId={workspaceId} candidates={workspaceId && candidatesQuery.status === 'success' ? candidatesQuery.data.filter((candidate) => candidate.status === 'ACTIVE' && !items.some((membership) => membership.userId === candidate.userId)) : []} onCancel={() => setCreating(false)} onCreated={() => { setCreating(false); toast.success(t('forms.created')); query.retry(); candidatesQuery.retry(); }} /> : null}</CreationDialog>} />
       <ScopeSelector />
-      {creating && tenantId && (!workspaceId || candidatesQuery.status === 'success') ? <InlineForm title={t(workspaceId ? 'users.addWorkspaceTitle' : 'users.addClientTitle')} description={t(workspaceId ? 'users.addWorkspaceDescription' : 'users.addClientDescription')} onClose={() => setCreating(false)}><MembershipForm tenantId={tenantId} workspaceId={workspaceId} candidates={workspaceId && candidatesQuery.status === 'success' ? candidatesQuery.data.filter((candidate) => candidate.status === 'ACTIVE' && !items.some((membership) => membership.userId === candidate.userId)) : []} onCancel={() => setCreating(false)} onCreated={() => { setCreating(false); toast.success(t('forms.created')); query.retry(); candidatesQuery.retry(); }} /></InlineForm> : null}
       <DataRegion toolbar={<SearchField value={search} onChange={setSearch} placeholder={t('users.search')} />}>
         {!tenantId ? <EmptyState title={t('context.selectClient')} description={t('context.selectClientDescription')} /> : query.status === 'loading' ? <LoadingRows /> : query.status === 'error' ? <ErrorState onRetry={query.retry} /> : items.length === 0 ? <EmptyState title={search ? t('common.noResults') : t('users.empty')} description={t(workspaceId ? 'users.emptyWorkspaceDescription' : 'users.emptyClientDescription')} /> : (
           <ul className="divide-y">{items.map((membership) => <li key={membership.userId} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:px-5">

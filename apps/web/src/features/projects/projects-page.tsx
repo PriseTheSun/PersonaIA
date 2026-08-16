@@ -4,8 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
 import { z } from 'zod';
+import { CreationDialog } from '@/components/shared/creation-dialog';
 import { DataRegion } from '@/components/shared/data-region';
-import { InlineForm } from '@/components/shared/inline-form';
 import { ScopeSelector } from '@/components/shared/scope-selector';
 import { EmptyState, ErrorState, LoadingRows } from '@/components/shared/states';
 import { PageHeader } from '@/components/shared/page-header';
@@ -42,9 +42,8 @@ export function ProjectsPage() {
   useEffect(() => { document.title = `${t('projects.title')} · ${t('common.appName')}`; }, [t]);
   return (
     <div className="space-y-6">
-      <PageHeader title={t('projects.title')} description={t('projects.description')} action={<Button onClick={() => setCreating(true)} disabled={!tenantId || !canCreate || workspacesQuery.status !== 'success' || creatableWorkspaces.length === 0}><Plus />{t('projects.create')}</Button>} />
+      <PageHeader title={t('projects.title')} description={t('projects.description')} action={<CreationDialog open={creating} onOpenChange={setCreating} title={t('forms.createProjectTitle')} description={t('forms.createProjectDescription')} trigger={<Button disabled={!tenantId || !canCreate || workspacesQuery.status !== 'success' || creatableWorkspaces.length === 0}><Plus />{t('projects.create')}</Button>}>{workspacesQuery.status === 'success' ? <CreateProjectForm workspaces={creatableWorkspaces} defaultWorkspaceId={workspaceId} onCancel={() => setCreating(false)} onCreated={() => { setCreating(false); toast.success(t('forms.created')); query.retry(); }} /> : null}</CreationDialog>} />
       <ScopeSelector />
-      {creating && workspacesQuery.status === 'success' ? <InlineForm title={t('forms.createProjectTitle')} description={t('forms.createProjectDescription')} onClose={() => setCreating(false)}><CreateProjectForm workspaces={creatableWorkspaces} defaultWorkspaceId={workspaceId} onCancel={() => setCreating(false)} onCreated={() => { setCreating(false); toast.success(t('forms.created')); query.retry(); }} /></InlineForm> : null}
       <DataRegion toolbar={<SearchField value={search} onChange={setSearch} placeholder={t('projects.search')} />}>
         {!tenantId ? <EmptyState title={t('context.selectClient')} description={t('context.selectClientDescription')} /> : query.status === 'loading' ? <LoadingRows /> : query.status === 'error' ? <ErrorState onRetry={query.retry} /> : items.length === 0 ? <EmptyState title={search ? t('common.noResults') : t('projects.empty')} description={t('projects.emptyDescription')} /> : (
           <ul className="divide-y">{items.map((project) => (

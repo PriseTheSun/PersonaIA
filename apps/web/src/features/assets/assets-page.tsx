@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
+import { CreationDialog } from '@/components/shared/creation-dialog';
 import { DataRegion } from '@/components/shared/data-region';
 import { InlineForm } from '@/components/shared/inline-form';
 import { PageHeader } from '@/components/shared/page-header';
@@ -72,9 +73,8 @@ export function AssetsPage({ kind }: { kind: AssetKind }) {
   const Icon = kind === 'personas' ? ScanFace : ClipboardList;
   return (
     <div className="space-y-6">
-      <PageHeader title={t(`${labelKey}.title`)} description={t(`${labelKey}.description`)} action={<Button onClick={() => { setCreating(true); setEditingId(null); }} disabled={!tenantId || !canWrite}><Plus />{t(`${labelKey}.create`)}</Button>} />
+      <PageHeader title={t(`${labelKey}.title`)} description={t(`${labelKey}.description`)} action={<CreationDialog open={creating} onOpenChange={(open) => { setCreating(open); if (open) setEditingId(null); }} title={t(`${labelKey}.createTitle`)} description={t(`${labelKey}.createDescription`)} trigger={<Button disabled={!tenantId || !canWrite}><Plus />{t(`${labelKey}.create`)}</Button>}>{tenantId ? <AssetForm path={`/tenants/${encodeURIComponent(tenantId)}/${kind}`} extraBody={{ workspaceIds: workspaceId ? [workspaceId] : [] }} submitLabel={t(`${labelKey}.create`)} onCancel={() => setCreating(false)} onSaved={() => { setCreating(false); toast.success(t('forms.created')); query.retry(); }} /> : null}</CreationDialog>} />
       <ScopeSelector />
-      {creating && tenantId ? <InlineForm title={t(`${labelKey}.createTitle`)} description={t(`${labelKey}.createDescription`)} onClose={() => setCreating(false)}><AssetForm path={`/tenants/${encodeURIComponent(tenantId)}/${kind}`} extraBody={{ workspaceIds: workspaceId ? [workspaceId] : [] }} submitLabel={t(`${labelKey}.create`)} onCancel={() => setCreating(false)} onSaved={() => { setCreating(false); toast.success(t('forms.created')); query.retry(); }} /></InlineForm> : null}
       {editing && tenantId ? <InlineForm title={t(`${labelKey}.editTitle`, { name: editing.name })} description={t(`${labelKey}.editDescription`)} onClose={() => setEditingId(null)}><AssetForm path={`/tenants/${encodeURIComponent(tenantId)}/${kind}/${encodeURIComponent(editing.id)}`} initial={{ name: editing.name, description: editing.description ?? '' }} submitLabel={t('common.save')} onCancel={() => setEditingId(null)} onSaved={() => { setEditingId(null); toast.success(t(`${labelKey}.updated`)); query.retry(); }} /></InlineForm> : null}
       <DataRegion toolbar={<SearchField value={search} onChange={setSearch} placeholder={t(`${labelKey}.search`)} />}>
         {!tenantId ? <EmptyState title={t('context.selectClient')} description={t('context.selectClientDescription')} /> : !isTenantAdmin && !workspaceId ? <EmptyState title={t('context.selectWorkspace')} description={t('context.selectWorkspaceDescription')} /> : !hasFeatureAccess ? <EmptyState title={t('common.accessDenied')} description={t('forbidden.description')} /> : query.status === 'loading' || workspacesQuery.status === 'loading' ? <LoadingRows /> : query.status === 'error' ? <ErrorState onRetry={query.retry} /> : workspacesQuery.status === 'error' ? <ErrorState onRetry={workspacesQuery.retry} /> : items.length === 0 ? <EmptyState title={search ? t('common.noResults') : t(`${labelKey}.empty`)} description={t(workspaceId ? `${labelKey}.emptyWorkspaceDescription` : `${labelKey}.emptyDescription`)} /> : <ul className="divide-y">{items.map((asset) => <li key={asset.id}>

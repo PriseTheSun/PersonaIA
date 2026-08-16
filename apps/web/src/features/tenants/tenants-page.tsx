@@ -4,8 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
 import { z } from 'zod';
+import { CreationDialog } from '@/components/shared/creation-dialog';
 import { DataRegion } from '@/components/shared/data-region';
-import { InlineForm } from '@/components/shared/inline-form';
 import { EmptyState, ErrorState, LoadingRows } from '@/components/shared/states';
 import { PageHeader } from '@/components/shared/page-header';
 import { SearchField } from '@/components/shared/search-field';
@@ -29,8 +29,7 @@ export function TenantsPage() {
   useEffect(() => { document.title = `${t('tenants.title')} · ${t('common.appName')}`; }, [t]);
   return (
     <div className="space-y-6">
-      <PageHeader title={t('tenants.title')} description={t('tenants.description')} action={<Button onClick={() => setCreating(true)}><Plus />{t('tenants.create')}</Button>} />
-      {creating ? <InlineForm title={t('forms.createTenantTitle')} description={t('forms.createTenantDescription')} onClose={() => setCreating(false)}><CreateTenantForm onCancel={() => setCreating(false)} onCreated={() => { setCreating(false); toast.success(t('forms.created')); query.retry(); }} /></InlineForm> : null}
+      <PageHeader title={t('tenants.title')} description={t('tenants.description')} action={<CreationDialog open={creating} onOpenChange={setCreating} title={t('forms.createTenantTitle')} description={t('forms.createTenantDescription')} trigger={<Button><Plus />{t('tenants.create')}</Button>}><CreateTenantForm onCancel={() => setCreating(false)} onCreated={() => { setCreating(false); toast.success(t('forms.created')); query.retry(); }} /></CreationDialog>} />
       <DataRegion toolbar={<SearchField value={search} onChange={setSearch} placeholder={t('tenants.search')} />}>
         {query.status === 'loading' ? <LoadingRows /> : query.status === 'error' ? <ErrorState onRetry={query.retry} /> : items.length === 0 ? <EmptyState title={search ? t('common.noResults') : t('tenants.empty')} description={t('tenants.emptyDescription')} /> : (
           <Table><TableHeader><TableRow><TableHead>{t('tenants.columns.tenant')}</TableHead><TableHead>{t('tenants.columns.workspaces')}</TableHead><TableHead className="hidden sm:table-cell">{t('tenants.columns.admins')}</TableHead><TableHead className="hidden md:table-cell">{t('tenants.columns.projects')}</TableHead><TableHead className="hidden lg:table-cell">{t('tenants.columns.created')}</TableHead><TableHead><span className="sr-only">{t('common.actions')}</span></TableHead></TableRow></TableHeader>

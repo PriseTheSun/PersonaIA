@@ -4,8 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { Avatar } from '@/components/shared/avatar';
+import { CreationDialog } from '@/components/shared/creation-dialog';
 import { DataRegion } from '@/components/shared/data-region';
-import { InlineForm } from '@/components/shared/inline-form';
 import { EmptyState, ErrorState, LoadingRows } from '@/components/shared/states';
 import { PageHeader } from '@/components/shared/page-header';
 import { SearchField } from '@/components/shared/search-field';
@@ -32,8 +32,7 @@ export function AdminsPage() {
   useEffect(() => { document.title = `${t('admins.title')} · ${t('common.appName')}`; }, [t]);
   return (
     <div className="space-y-6">
-      <PageHeader title={t('admins.title')} description={t('admins.description')} action={<Button onClick={() => setCreating(true)} disabled={tenantsQuery.status !== 'success' || tenantsQuery.data.length === 0}><Plus />{t('admins.create')}</Button>} />
-      {creating && tenantsQuery.status === 'success' ? <InlineForm title={t('forms.createAdminTitle')} description={t('forms.createAdminDescription')} onClose={() => setCreating(false)}><CreateAdminForm tenants={tenantsQuery.data} onCancel={() => setCreating(false)} onCreated={() => { setCreating(false); toast.success(t('forms.created')); query.retry(); }} /></InlineForm> : null}
+      <PageHeader title={t('admins.title')} description={t('admins.description')} action={<CreationDialog open={creating} onOpenChange={setCreating} title={t('forms.createAdminTitle')} description={t('forms.createAdminDescription')} trigger={<Button disabled={tenantsQuery.status !== 'success' || tenantsQuery.data.length === 0}><Plus />{t('admins.create')}</Button>}>{tenantsQuery.status === 'success' ? <CreateAdminForm tenants={tenantsQuery.data} onCancel={() => setCreating(false)} onCreated={() => { setCreating(false); toast.success(t('forms.created')); query.retry(); }} /> : null}</CreationDialog>} />
       <DataRegion toolbar={<SearchField value={search} onChange={setSearch} placeholder={t('admins.search')} />}>
         {query.status === 'loading' ? <LoadingRows /> : query.status === 'error' ? <ErrorState onRetry={query.retry} /> : items.length === 0 ? <EmptyState title={search ? t('common.noResults') : t('admins.empty')} description={t('admins.emptyDescription')} /> : (
           <Table><TableHeader><TableRow><TableHead>{t('admins.columns.admin')}</TableHead><TableHead>{t('admins.columns.tenant')}</TableHead><TableHead>{t('admins.columns.status')}</TableHead><TableHead className="hidden md:table-cell">{t('admins.columns.created')}</TableHead></TableRow></TableHeader>

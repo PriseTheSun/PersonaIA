@@ -8,7 +8,7 @@ export function ConfirmDialog({ title, description, confirmLabel, trigger, destr
   return (
     <Dialog>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent aria-describedby="confirm-dialog-description">
+      <DialogContent closeLabel={t('common.close')} aria-describedby="confirm-dialog-description">
         <DialogTitle className="pr-8 text-lg font-semibold">{title}</DialogTitle>
         <DialogDescription id="confirm-dialog-description" className="mt-2 text-sm leading-6 text-muted-foreground">{description}</DialogDescription>
         <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">

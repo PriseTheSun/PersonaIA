@@ -5,8 +5,8 @@ import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { ConfirmDialog } from '@/components/shared/confirm-dialog';
+import { CreationDialog } from '@/components/shared/creation-dialog';
 import { DataRegion } from '@/components/shared/data-region';
-import { InlineForm } from '@/components/shared/inline-form';
 import { PageHeader } from '@/components/shared/page-header';
 import { ScopeSelector } from '@/components/shared/scope-selector';
 import { SearchField } from '@/components/shared/search-field';
@@ -54,9 +54,8 @@ export function WorkspacesPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t('workspaces.title')} description={t('workspaces.description')} action={canManage ? <Button onClick={() => setCreating(true)} disabled={!tenantId}><Plus />{t('workspaces.create')}</Button> : undefined} />
+      <PageHeader title={t('workspaces.title')} description={t('workspaces.description')} action={canManage ? <CreationDialog open={creating} onOpenChange={setCreating} title={t('forms.createWorkspaceTitle')} description={t('forms.createWorkspaceDescription')} trigger={<Button disabled={!tenantId}><Plus />{t('workspaces.create')}</Button>}>{tenantId ? <CreateWorkspaceForm tenantId={tenantId} onCancel={() => setCreating(false)} onCreated={() => { setCreating(false); toast.success(t('forms.created')); query.retry(); }} /> : null}</CreationDialog> : undefined} />
       <ScopeSelector includeWorkspace={false} />
-      {creating && tenantId ? <InlineForm title={t('forms.createWorkspaceTitle')} description={t('forms.createWorkspaceDescription')} onClose={() => setCreating(false)}><CreateWorkspaceForm tenantId={tenantId} onCancel={() => setCreating(false)} onCreated={() => { setCreating(false); toast.success(t('forms.created')); query.retry(); }} /></InlineForm> : null}
       <DataRegion toolbar={<SearchField value={search} onChange={setSearch} placeholder={t('workspaces.search')} />}>
         {!tenantId ? <EmptyState title={t('context.selectClient')} description={t('context.selectClientDescription')} /> : query.status === 'loading' ? <LoadingRows /> : query.status === 'error' ? <ErrorState onRetry={query.retry} /> : items.length === 0 ? <EmptyState title={search ? t('common.noResults') : t('workspaces.empty')} description={t('workspaces.emptyDescription')} /> : (
           <ul className="divide-y">{items.map((workspace) => <li key={workspace.id} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:px-5">
