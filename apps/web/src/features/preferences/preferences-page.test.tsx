@@ -44,8 +44,9 @@ describe('PreferencesPage', () => {
   it('shows profile photo and password controls for the current user', () => {
     renderPage();
     expect(screen.getByRole('heading', { level: 1, name: 'Preferências' })).toBeVisible();
-    expect(screen.getByRole('heading', { level: 2, name: 'Foto de perfil' })).toBeVisible();
-    expect(screen.getByRole('heading', { level: 2, name: 'Alterar senha' })).toBeVisible();
+    const sections = screen.getAllByRole('heading', { level: 2 });
+    expect(sections.map((heading) => heading.textContent)).toEqual(['Foto de perfil', 'Alterar senha']);
+    expect(sections[0].closest('section')?.parentElement).toHaveClass('flex', 'flex-col');
     expect(screen.getByLabelText('Escolher foto')).toHaveAttribute('accept', 'image/png,image/jpeg');
   });
 

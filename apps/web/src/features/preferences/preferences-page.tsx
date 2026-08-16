@@ -18,7 +18,7 @@ export function PreferencesPage() {
   return (
     <div className="space-y-6">
       <PageHeader title={t('preferences.title')} description={t('preferences.description')} />
-      <div className="grid max-w-5xl gap-5 lg:grid-cols-2 lg:items-start">
+      <div className="flex max-w-3xl flex-col gap-5">
         <AvatarPreference
           name={user.name}
           email={user.email}
