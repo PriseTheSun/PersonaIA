@@ -123,17 +123,16 @@ export class WorkspacesService {
   }
 
   async remove(tenantId: string, workspaceId: string, actor: Principal) {
-    const workspace = await this.requireNestedAdmin(tenantId, workspaceId, actor);
-    if (workspace.isDefault) throw new ConflictException('O workspace padrão não pode ser removido.');
+    await this.requireNestedAdmin(tenantId, workspaceId, actor);
     await this.serializable(async (tx) => {
+      await this.access.lockTenant(tx, tenantId);
       await this.access.lockWorkspace(tx, workspaceId);
-      const activeProjects = await tx.project.count({ where: { workspaceId, status: RecordStatus.ACTIVE } });
-      if (activeProjects) throw new ConflictException('Arquive os projetos ativos antes de remover o workspace.');
+      const ungrouped = await tx.project.updateMany({ where: { tenantId, workspaceId }, data: { workspaceId: null } });
       await tx.workspace.update({ where: { id: workspaceId }, data: { status: RecordStatus.REMOVED } });
       await tx.auditLog.create({
         data: {
           actorId: actor.id, tenantId, action: 'WORKSPACE_REMOVED', targetType: 'Workspace', targetId: workspaceId,
-          scopeType: 'WORKSPACE', scopeId: workspaceId,
+          scopeType: 'WORKSPACE', scopeId: workspaceId, metadata: { ungroupedProjects: ungrouped.count },
         },
       });
     });

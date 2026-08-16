@@ -3,6 +3,7 @@ import { z } from 'zod';
 const permissionSchema = z.enum(['OWNER', 'MANAGER', 'CONTRIBUTOR', 'VIEWER']);
 
 export const createProjectSchema = z.object({
+  tenantId: z.string().uuid().optional(),
   workspaceId: z.string().uuid().optional(),
   name: z.string().trim().min(2).max(120),
   slug: z.string().trim().min(2).max(80).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).optional(),
@@ -17,7 +18,8 @@ export const projectQuerySchema = z.object({
 export const updateProjectSchema = z.object({
   name: z.string().trim().min(2).max(120).optional(),
   description: z.string().trim().max(500).nullable().optional(),
-  status: z.enum(['ACTIVE', 'ARCHIVED']).optional()
+  status: z.enum(['ACTIVE', 'ARCHIVED']).optional(),
+  workspaceId: z.string().uuid().nullable().optional(),
 }).strict().refine((value) => Object.keys(value).length > 0, 'Informe ao menos um campo.');
 
 export const addMemberSchema = z.object({ userId: z.string().uuid(), permission: permissionSchema.default('VIEWER') }).strict();

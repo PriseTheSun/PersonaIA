@@ -16,11 +16,12 @@ describe('AccessControlService permission resolution', () => {
           .mockResolvedValueOnce({ role: 'WORKSPACE_MEMBER', status: 'ACTIVE', clientMembership: { status: 'ACTIVE' } })
           .mockResolvedValueOnce({ role: 'WORKSPACE_MEMBER', status: 'ACTIVE' }),
       },
-      project: { findFirst: jest.fn().mockResolvedValue({ id: projectId }) },
       projectFunctionalPermission: { findUnique: jest.fn().mockResolvedValue(projectRule) },
       workspacePermission: { findUnique: jest.fn().mockResolvedValue({ level: 'ADMIN', effect: 'ALLOW' }) },
     };
-    return { prisma, service: new AccessControlService(prisma as never) };
+    const service = new AccessControlService(prisma as never);
+    jest.spyOn(service, 'requireProject').mockResolvedValue({ id: projectId, tenantId, workspaceId, status: 'ACTIVE' });
+    return { prisma, service };
   }
 
   it('gives explicit project DENY priority over inherited workspace ADMIN', async () => {
@@ -37,5 +38,19 @@ describe('AccessControlService permission resolution', () => {
       workspaceId, projectId, feature: 'PERSONA', level: 'WRITE',
     })).rejects.toBeInstanceOf(ForbiddenException);
     expect(prisma.workspacePermission.findUnique).not.toHaveBeenCalled();
+  });
+
+  it('authorizes an ungrouped project from its project membership preset', async () => {
+    const prisma = {
+      clientMembership: { findUnique: jest.fn().mockResolvedValue({ role: 'CLIENT_MEMBER', status: 'ACTIVE' }) },
+      projectFunctionalPermission: { findUnique: jest.fn().mockResolvedValue(null) },
+      projectMembership: { findUnique: jest.fn().mockResolvedValue({ permission: 'CONTRIBUTOR' }) },
+    };
+    const service = new AccessControlService(prisma as never);
+    jest.spyOn(service, 'requireProject').mockResolvedValue({ id: projectId, tenantId, workspaceId: null, status: 'ACTIVE' });
+
+    await expect(service.requireFeature(actor, {
+      projectId, feature: 'PERSONA', level: 'WRITE',
+    })).resolves.toEqual(expect.objectContaining({ id: projectId, workspaceId: null }));
   });
 });

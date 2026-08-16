@@ -381,7 +381,7 @@ export class AssetsService {
     return this.prisma.$transaction(async (tx) => {
       await this.access.lockTenant(tx, project.tenantId);
       const currentProject = await tx.project.findFirst({
-        where: { id: projectId, tenantId: project.tenantId, workspaceId: project.workspaceId, status: RecordStatus.ACTIVE },
+        where: { id: projectId, tenantId: project.tenantId, status: RecordStatus.ACTIVE },
       });
       if (!currentProject) throw new NotFoundException('Projeto não encontrado.');
       const persona = kind === 'PERSONA'
@@ -395,10 +395,12 @@ export class AssetsService {
         : null;
       const asset = persona ?? questionnaire;
       if (!asset) throw new NotFoundException('Ativo não encontrado.');
-      const associated = kind === 'PERSONA'
-        ? await tx.workspacePersona.count({ where: { workspaceId: project.workspaceId, personaId: assetId, disassociatedAt: null } })
-        : await tx.workspaceQuestionnaire.count({ where: { workspaceId: project.workspaceId, questionnaireId: assetId, disassociatedAt: null } });
-      if (!associated) throw new ConflictException('O ativo não está associado ao workspace do projeto.');
+      if (currentProject.workspaceId) {
+        const associated = kind === 'PERSONA'
+          ? await tx.workspacePersona.count({ where: { workspaceId: currentProject.workspaceId, personaId: assetId, disassociatedAt: null } })
+          : await tx.workspaceQuestionnaire.count({ where: { workspaceId: currentProject.workspaceId, questionnaireId: assetId, disassociatedAt: null } });
+        if (!associated) throw new ConflictException('O ativo não está associado ao workspace do projeto.');
+      }
       const snapshot = {
         id: asset.id, name: asset.name, description: asset.description, data: asset.data, version: asset.version,
         ...(questionnaire ? {
@@ -409,8 +411,8 @@ export class AssetsService {
         } : {}),
       } as Prisma.InputJsonValue;
       const usage = kind === 'PERSONA'
-        ? await tx.projectPersonaUsage.create({ data: { tenantId: project.tenantId, workspaceId: project.workspaceId, projectId, personaId: assetId, version: asset.version, snapshot } })
-        : await tx.projectQuestionnaireUsage.create({ data: { tenantId: project.tenantId, workspaceId: project.workspaceId, projectId, questionnaireId: assetId, version: asset.version, snapshot } });
+        ? await tx.projectPersonaUsage.create({ data: { tenantId: project.tenantId, workspaceId: currentProject.workspaceId, projectId, personaId: assetId, version: asset.version, snapshot } })
+        : await tx.projectQuestionnaireUsage.create({ data: { tenantId: project.tenantId, workspaceId: currentProject.workspaceId, projectId, questionnaireId: assetId, version: asset.version, snapshot } });
       await tx.auditLog.create({
         data: {
           actorId: actor.id, tenantId: project.tenantId, action: `${kind}_USED`, targetType: kind, targetId: assetId,

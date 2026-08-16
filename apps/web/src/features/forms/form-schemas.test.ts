@@ -21,9 +21,10 @@ describe('mutation form schemas', () => {
     expect(createUserFormSchema.safeParse({ name: 'Project User', email: 'user@example.com', password: 'Secure!Pass123', projectIds: [], permission: 'CONTRIBUTOR' }).success).toBe(true);
   });
 
-  it('requires every new project to belong to one workspace', () => {
-    expect(createProjectFormSchema.safeParse({ name: 'Project without workspace', description: '' }).success).toBe(false);
-    expect(createProjectFormSchema.safeParse({ workspaceId: 'workspace-1', name: 'Project A', description: '' }).success).toBe(true);
+  it('accepts an optional workspace folder and validates it when provided', () => {
+    expect(createProjectFormSchema.safeParse({ name: 'Project without workspace', description: '' }).success).toBe(true);
+    expect(createProjectFormSchema.safeParse({ workspaceId: 'b943aeb6-dd9a-49fd-a8b4-bf206e234b52', name: 'Project A', description: '' }).success).toBe(true);
+    expect(createProjectFormSchema.safeParse({ workspaceId: 'workspace-1', name: 'Project A', description: '' }).success).toBe(false);
   });
 
   it('accepts explicit functional denial as a first-class permission', () => {

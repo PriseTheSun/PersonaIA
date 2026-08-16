@@ -28,7 +28,7 @@ export type CreateAdminFormInput = z.infer<typeof createAdminFormSchema>;
 export const createWorkspaceFormSchema = z.object({ name, description: z.string().trim().max(500).optional() });
 export type CreateWorkspaceFormInput = z.infer<typeof createWorkspaceFormSchema>;
 
-export const createProjectFormSchema = z.object({ workspaceId: z.string().min(1, 'forms.validation.workspace'), name, description: z.string().trim().max(500).optional() });
+export const createProjectFormSchema = z.object({ workspaceId: z.union([z.string().uuid('forms.validation.workspace'), z.literal('')]).optional(), name, description: z.string().trim().max(500).optional() });
 export type CreateProjectFormInput = z.infer<typeof createProjectFormSchema>;
 
 export const createClientMembershipFormSchema = z.object({

@@ -1,7 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import {
   ClientRole, Feature, MembershipStatus, PermissionEffect, PermissionLevel,
-  Prisma, WorkspaceRole,
+  Prisma, ProjectPermission, WorkspaceRole,
 } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { Principal } from './types/principal';
@@ -100,51 +100,71 @@ export class AccessControlService {
   }
 
   async requireFeature(actor: Principal, input: {
-    workspaceId: string;
+    workspaceId?: string | null;
     projectId?: string;
     feature: Feature;
     level: PermissionLevel;
   }) {
-    const workspace = await this.requireWorkspace(actor, input.workspaceId);
-    if (this.isSuper(actor)) return workspace;
+    const project = input.projectId ? await this.requireProject(actor, input.projectId) : null;
+    if (project && input.workspaceId && project.workspaceId !== input.workspaceId) {
+      throw new NotFoundException('Projeto não encontrado.');
+    }
+    const workspaceId = project?.workspaceId ?? input.workspaceId ?? null;
+    const workspace = !project && workspaceId ? await this.requireWorkspace(actor, workspaceId) : null;
+    if (!project && !workspace) throw new ForbiddenException('Informe um projeto ou workspace válido.');
+    if (this.isSuper(actor)) return project ?? workspace!;
+    const tenantId = project?.tenantId ?? workspace!.tenantId;
     const clientAdmin = await this.prisma.clientMembership.findUnique({
-      where: { tenantId_userId: { tenantId: workspace.tenantId, userId: actor.id } },
+      where: { tenantId_userId: { tenantId, userId: actor.id } },
       select: { role: true, status: true },
     });
-    if (clientAdmin?.status === MembershipStatus.ACTIVE && clientAdmin.role === ClientRole.CLIENT_ADMIN) return workspace;
-    const workspaceMembership = await this.prisma.workspaceMembership.findUnique({
-      where: { workspaceId_userId: { workspaceId: input.workspaceId, userId: actor.id } },
-      select: { role: true, status: true },
-    });
-    if (workspaceMembership?.status !== MembershipStatus.ACTIVE) throw new ForbiddenException('Acesso não permitido.');
-    if (workspaceMembership.role === WorkspaceRole.WORKSPACE_ADMIN) return workspace;
+    if (clientAdmin?.status === MembershipStatus.ACTIVE && clientAdmin.role === ClientRole.CLIENT_ADMIN) return project ?? workspace!;
 
-    if (input.projectId) {
-      const project = await this.prisma.project.findFirst({
-        where: { id: input.projectId, workspaceId: input.workspaceId, tenantId: workspace.tenantId, status: 'ACTIVE' },
-        select: { id: true },
-      });
-      if (!project) throw new NotFoundException('Projeto não encontrado.');
+    if (project) {
       const projectRule = await this.prisma.projectFunctionalPermission.findUnique({
-        where: { projectId_userId_feature: { projectId: input.projectId, userId: actor.id, feature: input.feature } },
+        where: { projectId_userId_feature: { projectId: project.id, userId: actor.id, feature: input.feature } },
         select: { level: true, effect: true },
       });
       if (projectRule) {
         if (projectRule.effect === PermissionEffect.DENY || rank[projectRule.level] < rank[input.level]) {
           throw new ForbiddenException('Permissão funcional insuficiente.');
         }
-        return workspace;
+        return project;
       }
     }
 
+    if (!workspaceId) {
+      const membership = await this.prisma.projectMembership.findUnique({
+        where: { projectId_userId: { projectId: project!.id, userId: actor.id } },
+        select: { permission: true },
+      });
+      const inheritedLevel: Record<ProjectPermission, PermissionLevel> = {
+        [ProjectPermission.OWNER]: PermissionLevel.ADMIN,
+        [ProjectPermission.MANAGER]: PermissionLevel.ADMIN,
+        [ProjectPermission.CONTRIBUTOR]: PermissionLevel.WRITE,
+        [ProjectPermission.VIEWER]: PermissionLevel.READ,
+      };
+      if (!membership || rank[inheritedLevel[membership.permission]] < rank[input.level]) {
+        throw new ForbiddenException('Permissão funcional insuficiente.');
+      }
+      return project!;
+    }
+
+    const authorizedWorkspace = await this.requireWorkspace(actor, workspaceId);
+    const workspaceMembership = await this.prisma.workspaceMembership.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: actor.id } },
+      select: { role: true, status: true },
+    });
+    if (workspaceMembership?.status !== MembershipStatus.ACTIVE) throw new ForbiddenException('Acesso não permitido.');
+    if (workspaceMembership.role === WorkspaceRole.WORKSPACE_ADMIN) return project ?? authorizedWorkspace;
     const workspaceRule = await this.prisma.workspacePermission.findUnique({
-      where: { workspaceId_userId_feature: { workspaceId: input.workspaceId, userId: actor.id, feature: input.feature } },
+      where: { workspaceId_userId_feature: { workspaceId, userId: actor.id, feature: input.feature } },
       select: { level: true, effect: true },
     });
     if (!workspaceRule || workspaceRule.effect === PermissionEffect.DENY || rank[workspaceRule.level] < rank[input.level]) {
       throw new ForbiddenException('Permissão funcional insuficiente.');
     }
-    return workspace;
+    return project ?? authorizedWorkspace;
   }
 
   async requireProject(actor: Principal, projectId: string, admin = false) {
@@ -153,7 +173,37 @@ export class AccessControlService {
       select: { id: true, tenantId: true, workspaceId: true, status: true },
     });
     if (!project) throw new NotFoundException('Projeto não encontrado.');
-    await this.requireWorkspace(actor, project.workspaceId, admin);
+    if (this.isSuper(actor)) return project;
+    const clientMembership = await this.prisma.clientMembership.findUnique({
+      where: { tenantId_userId: { tenantId: project.tenantId, userId: actor.id } },
+      select: { role: true, status: true },
+    });
+    if (clientMembership?.status !== MembershipStatus.ACTIVE) throw new NotFoundException('Projeto não encontrado.');
+    if (clientMembership.role === ClientRole.CLIENT_ADMIN) return project;
+
+    const [projectMembership, projectPermission, workspaceMembership] = await Promise.all([
+      this.prisma.projectMembership.findUnique({
+        where: { projectId_userId: { projectId, userId: actor.id } },
+        select: { permission: true },
+      }),
+      this.prisma.projectFunctionalPermission.findFirst({
+        where: { projectId, userId: actor.id, effect: PermissionEffect.ALLOW },
+        select: { id: true },
+      }),
+      project.workspaceId
+        ? this.prisma.workspaceMembership.findUnique({
+            where: { workspaceId_userId: { workspaceId: project.workspaceId, userId: actor.id } },
+            select: { role: true, status: true },
+          })
+        : Promise.resolve(null),
+    ]);
+    const workspaceAccess = workspaceMembership?.status === MembershipStatus.ACTIVE;
+    const projectAdmin = projectMembership?.permission === ProjectPermission.OWNER
+      || projectMembership?.permission === ProjectPermission.MANAGER;
+    if (admin ? (!projectAdmin && !(workspaceAccess && workspaceMembership.role === WorkspaceRole.WORKSPACE_ADMIN))
+      : (!projectMembership && !projectPermission && !workspaceAccess)) {
+      throw new NotFoundException('Projeto não encontrado.');
+    }
     return project;
   }
 

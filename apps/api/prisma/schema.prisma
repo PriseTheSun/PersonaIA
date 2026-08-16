@@ -142,17 +142,18 @@ model User {
 }
 
 model ClientMembership {
-  id                   String                @id @default(uuid()) @db.Uuid
-  tenantId             String                @db.Uuid
-  userId               String                @db.Uuid
-  role                 ClientRole            @default(CLIENT_MEMBER)
-  status               MembershipStatus      @default(INVITED)
-  tenant               Tenant                @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  user                 User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
-  workspaceMemberships WorkspaceMembership[] @relation("ClientWorkspaceMembership")
-  projectMemberships   ProjectMembership[]   @relation("ClientProjectMembership")
-  createdAt            DateTime              @default(now())
-  updatedAt            DateTime              @updatedAt
+  id                   String                        @id @default(uuid()) @db.Uuid
+  tenantId             String                        @db.Uuid
+  userId               String                        @db.Uuid
+  role                 ClientRole                    @default(CLIENT_MEMBER)
+  status               MembershipStatus              @default(INVITED)
+  tenant               Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  user                 User                          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  workspaceMemberships WorkspaceMembership[]         @relation("ClientWorkspaceMembership")
+  projectMemberships   ProjectMembership[]           @relation("ClientProjectMembership")
+  projectPermissions   ProjectFunctionalPermission[] @relation("ClientProjectPermissions")
+  createdAt            DateTime                      @default(now())
+  updatedAt            DateTime                      @updatedAt
 
   @@unique([tenantId, userId])
   @@unique([id, tenantId])
@@ -161,25 +162,24 @@ model ClientMembership {
 }
 
 model Workspace {
-  id                        String                        @id @default(uuid()) @db.Uuid
-  tenantId                  String                        @db.Uuid
-  tenant                    Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  name                      String                        @db.VarChar(120)
-  slug                      String                        @db.VarChar(80)
-  description               String?                       @db.VarChar(1000)
-  status                    RecordStatus                  @default(ACTIVE)
-  isDefault                 Boolean                       @default(false)
+  id                        String                      @id @default(uuid()) @db.Uuid
+  tenantId                  String                      @db.Uuid
+  tenant                    Tenant                      @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  name                      String                      @db.VarChar(120)
+  slug                      String                      @db.VarChar(80)
+  description               String?                     @db.VarChar(1000)
+  status                    RecordStatus                @default(ACTIVE)
+  isDefault                 Boolean                     @default(false)
   projects                  Project[]
   memberships               WorkspaceMembership[]
   permissions               WorkspacePermission[]
-  projectPermissions        ProjectFunctionalPermission[]
   personas                  WorkspacePersona[]
   questionnaires            WorkspaceQuestionnaire[]
   associationHistory        AssetAssociationHistory[]
   projectPersonaUsage       ProjectPersonaUsage[]
   projectQuestionnaireUsage ProjectQuestionnaireUsage[]
-  createdAt                 DateTime                      @default(now())
-  updatedAt                 DateTime                      @updatedAt
+  createdAt                 DateTime                    @default(now())
+  updatedAt                 DateTime                    @updatedAt
 
   @@unique([tenantId, slug])
   @@unique([id, tenantId])
@@ -187,20 +187,19 @@ model Workspace {
 }
 
 model WorkspaceMembership {
-  id                       String                        @id @default(uuid()) @db.Uuid
-  tenantId                 String                        @db.Uuid
-  workspaceId              String                        @db.Uuid
-  userId                   String                        @db.Uuid
-  role                     WorkspaceRole                 @default(WORKSPACE_MEMBER)
-  status                   MembershipStatus              @default(INVITED)
-  inheritedFromClientAdmin Boolean                       @default(false)
-  workspace                Workspace                     @relation(fields: [workspaceId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  user                     User                          @relation(fields: [userId], references: [id], onDelete: Restrict)
-  clientMembership         ClientMembership              @relation("ClientWorkspaceMembership", fields: [tenantId, userId], references: [tenantId, userId], onDelete: Restrict)
-  workspacePermissions     WorkspacePermission[]         @relation("WorkspaceMemberPermissions")
-  projectPermissions       ProjectFunctionalPermission[] @relation("WorkspaceMemberProjectPermissions")
-  createdAt                DateTime                      @default(now())
-  updatedAt                DateTime                      @updatedAt
+  id                       String                @id @default(uuid()) @db.Uuid
+  tenantId                 String                @db.Uuid
+  workspaceId              String                @db.Uuid
+  userId                   String                @db.Uuid
+  role                     WorkspaceRole         @default(WORKSPACE_MEMBER)
+  status                   MembershipStatus      @default(INVITED)
+  inheritedFromClientAdmin Boolean               @default(false)
+  workspace                Workspace             @relation(fields: [workspaceId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  user                     User                  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  clientMembership         ClientMembership      @relation("ClientWorkspaceMembership", fields: [tenantId, userId], references: [tenantId, userId], onDelete: Restrict)
+  workspacePermissions     WorkspacePermission[] @relation("WorkspaceMemberPermissions")
+  createdAt                DateTime              @default(now())
+  updatedAt                DateTime              @updatedAt
 
   @@unique([workspaceId, userId])
   @@unique([id, tenantId, workspaceId])
@@ -231,9 +230,9 @@ model WorkspacePermission {
 model Project {
   id                 String                        @id @default(uuid()) @db.Uuid
   tenantId           String                        @db.Uuid
-  workspaceId        String                        @db.Uuid
+  workspaceId        String?                       @db.Uuid
   tenant             Tenant                        @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  workspace          Workspace                     @relation(fields: [workspaceId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  workspace          Workspace?                    @relation(fields: [workspaceId, tenantId], references: [id, tenantId], onDelete: Restrict)
   name               String                        @db.VarChar(120)
   slug               String                        @db.VarChar(80)
   description        String?                       @db.VarChar(500)
@@ -245,9 +244,8 @@ model Project {
   createdAt          DateTime                      @default(now())
   updatedAt          DateTime                      @updatedAt
 
-  @@unique([workspaceId, slug])
+  @@unique([tenantId, slug])
   @@unique([id, tenantId])
-  @@unique([id, tenantId, workspaceId])
   @@index([tenantId, workspaceId, status])
 }
 
@@ -270,24 +268,22 @@ model ProjectMembership {
 }
 
 model ProjectFunctionalPermission {
-  id          String              @id @default(uuid()) @db.Uuid
-  tenantId    String              @db.Uuid
-  workspaceId String              @db.Uuid
-  projectId   String              @db.Uuid
-  userId      String              @db.Uuid
-  feature     Feature
-  level       PermissionLevel
-  effect      PermissionEffect    @default(ALLOW)
-  tenant      Tenant              @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  workspace   Workspace           @relation(fields: [workspaceId, tenantId], references: [id, tenantId], onDelete: Cascade)
-  project     Project             @relation(fields: [projectId, tenantId, workspaceId], references: [id, tenantId, workspaceId], onDelete: Cascade)
-  user        User                @relation(fields: [userId], references: [id], onDelete: Restrict)
-  membership  WorkspaceMembership @relation("WorkspaceMemberProjectPermissions", fields: [workspaceId, userId], references: [workspaceId, userId], onDelete: Cascade)
-  createdAt   DateTime            @default(now())
-  updatedAt   DateTime            @updatedAt
+  id         String           @id @default(uuid()) @db.Uuid
+  tenantId   String           @db.Uuid
+  projectId  String           @db.Uuid
+  userId     String           @db.Uuid
+  feature    Feature
+  level      PermissionLevel
+  effect     PermissionEffect @default(ALLOW)
+  tenant     Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  project    Project          @relation(fields: [projectId, tenantId], references: [id, tenantId], onDelete: Cascade)
+  user       User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  membership ClientMembership @relation("ClientProjectPermissions", fields: [tenantId, userId], references: [tenantId, userId], onDelete: Cascade)
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
 
   @@unique([projectId, userId, feature])
-  @@index([tenantId, workspaceId, userId])
+  @@index([tenantId, userId])
 }
 
 model Persona {
@@ -404,34 +400,34 @@ model AssetAssociationHistory {
 }
 
 model ProjectPersonaUsage {
-  id          String    @id @default(uuid()) @db.Uuid
-  tenantId    String    @db.Uuid
-  workspaceId String    @db.Uuid
-  projectId   String    @db.Uuid
-  personaId   String    @db.Uuid
+  id          String     @id @default(uuid()) @db.Uuid
+  tenantId    String     @db.Uuid
+  workspaceId String?    @db.Uuid
+  projectId   String     @db.Uuid
+  personaId   String     @db.Uuid
   snapshot    Json
   version     Int
-  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  workspace   Workspace @relation(fields: [workspaceId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  project     Project   @relation(fields: [projectId, tenantId, workspaceId], references: [id, tenantId, workspaceId], onDelete: Restrict)
-  createdAt   DateTime  @default(now())
+  tenant      Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  workspace   Workspace? @relation(fields: [workspaceId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  project     Project    @relation(fields: [projectId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  createdAt   DateTime   @default(now())
 
   @@index([tenantId, personaId])
   @@index([projectId, createdAt])
 }
 
 model ProjectQuestionnaireUsage {
-  id              String    @id @default(uuid()) @db.Uuid
-  tenantId        String    @db.Uuid
-  workspaceId     String    @db.Uuid
-  projectId       String    @db.Uuid
-  questionnaireId String    @db.Uuid
+  id              String     @id @default(uuid()) @db.Uuid
+  tenantId        String     @db.Uuid
+  workspaceId     String?    @db.Uuid
+  projectId       String     @db.Uuid
+  questionnaireId String     @db.Uuid
   snapshot        Json
   version         Int
-  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Restrict)
-  workspace       Workspace @relation(fields: [workspaceId, tenantId], references: [id, tenantId], onDelete: Restrict)
-  project         Project   @relation(fields: [projectId, tenantId, workspaceId], references: [id, tenantId, workspaceId], onDelete: Restrict)
-  createdAt       DateTime  @default(now())
+  tenant          Tenant     @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  workspace       Workspace? @relation(fields: [workspaceId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  project         Project    @relation(fields: [projectId, tenantId], references: [id, tenantId], onDelete: Restrict)
+  createdAt       DateTime   @default(now())
 
   @@index([tenantId, questionnaireId])
   @@index([projectId, createdAt])

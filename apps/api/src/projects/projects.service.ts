@@ -25,7 +25,11 @@ export class ProjectsService {
       await this.accessControl().requireTenant(actor, query.tenantId);
       where.tenantId = query.tenantId;
       if (!this.accessControl().isSuper(actor) && !await this.isClientAdmin(actor.id, query.tenantId)) {
-        where.workspace = { memberships: { some: { userId: actor.id, status: MembershipStatus.ACTIVE } } };
+        where.OR = [
+          { workspace: { memberships: { some: { userId: actor.id, status: MembershipStatus.ACTIVE } } } },
+          { memberships: { some: { userId: actor.id, clientMembership: { status: MembershipStatus.ACTIVE } } } },
+          { permissions: { some: { userId: actor.id, effect: PermissionEffect.ALLOW, membership: { status: MembershipStatus.ACTIVE } } } },
+        ];
       }
     } else if (!this.accessControl().isSuper(actor)) {
       const [clientAdmins, workspaceMemberships] = await Promise.all([
@@ -41,6 +45,8 @@ export class ProjectsService {
       where.OR = [
         { tenantId: { in: clientAdmins.map(({ tenantId }) => tenantId) } },
         { workspaceId: { in: workspaceMemberships.map(({ workspaceId }) => workspaceId) } },
+        { memberships: { some: { userId: actor.id, clientMembership: { status: MembershipStatus.ACTIVE } } } },
+        { permissions: { some: { userId: actor.id, effect: PermissionEffect.ALLOW, membership: { status: MembershipStatus.ACTIVE } } } },
       ];
     }
     const projects = await this.prisma.project.findMany({
@@ -66,37 +72,45 @@ export class ProjectsService {
   }
 
   async create(input: CreateProjectInput, actor: Principal) {
-    const workspace = input.workspaceId
-      ? await this.accessControl().requireWorkspace(actor, input.workspaceId)
-      : await this.defaultWorkspace(actor);
-    await this.accessControl().requireFeature(actor, {
-      workspaceId: workspace.id, feature: Feature.PERSONA, level: PermissionLevel.WRITE,
-    });
+    const workspace = input.workspaceId ? await this.accessControl().requireWorkspace(actor, input.workspaceId) : null;
+    const tenantId = workspace?.tenantId ?? input.tenantId ?? actor.tenantId;
+    if (!tenantId || (workspace && input.tenantId && workspace.tenantId !== input.tenantId)) {
+      throw new NotFoundException('Organização não encontrada.');
+    }
+    if (workspace) {
+      await this.accessControl().requireFeature(actor, {
+        workspaceId: workspace.id, feature: Feature.PERSONA, level: PermissionLevel.WRITE,
+      });
+    } else {
+      await this.accessControl().requireTenant(actor, tenantId, true);
+    }
     try {
       return await this.prisma.$transaction(async (tx) => {
-        await this.accessControl().lockTenant(tx, workspace.tenantId);
-        await this.accessControl().lockWorkspace(tx, workspace.id);
-        const activeWorkspace = await tx.workspace.count({
-          where: { id: workspace.id, tenantId: workspace.tenantId, status: RecordStatus.ACTIVE, tenant: { status: RecordStatus.ACTIVE } },
-        });
-        if (!activeWorkspace) throw new NotFoundException('Workspace não encontrado.');
+        await this.accessControl().lockTenant(tx, tenantId);
+        if (workspace) {
+          await this.accessControl().lockWorkspace(tx, workspace.id);
+          const activeWorkspace = await tx.workspace.count({
+            where: { id: workspace.id, tenantId, status: RecordStatus.ACTIVE, tenant: { status: RecordStatus.ACTIVE } },
+          });
+          if (!activeWorkspace) throw new NotFoundException('Workspace não encontrado.');
+        }
         const project = await tx.project.create({
           data: {
-            tenantId: workspace.tenantId, workspaceId: workspace.id,
+            tenantId, workspaceId: workspace?.id ?? null,
             name: input.name.trim(), slug: normalizeSlug(input.slug ?? input.name), description: input.description?.trim(),
           },
         });
         await tx.auditLog.create({
           data: {
-            tenantId: workspace.tenantId, actorId: actor.id, action: 'PROJECT_CREATED', targetType: 'Project', targetId: project.id,
-            scopeType: 'PROJECT', scopeId: project.id, metadata: { workspaceId: workspace.id },
+            tenantId, actorId: actor.id, action: 'PROJECT_CREATED', targetType: 'Project', targetId: project.id,
+            scopeType: 'PROJECT', scopeId: project.id, metadata: { workspaceId: workspace?.id ?? null },
           },
         });
         return project;
       }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        throw new ConflictException('Já existe um projeto com esse slug neste workspace.');
+        throw new ConflictException('Já existe um projeto com esse slug nesta organização.');
       }
       throw error;
     }
@@ -104,6 +118,17 @@ export class ProjectsService {
 
   async update(id: string, input: UpdateProjectInput, actor: Principal) {
     const projectContext = await this.accessControl().requireProject(actor, id, true);
+    let nextWorkspaceId: string | null | undefined;
+    if (input.workspaceId !== undefined) {
+      await this.accessControl().requireTenant(actor, projectContext.tenantId, true);
+      if (input.workspaceId) {
+        const workspace = await this.accessControl().requireWorkspace(actor, input.workspaceId, true);
+        if (workspace.tenantId !== projectContext.tenantId) throw new NotFoundException('Workspace não encontrado.');
+        nextWorkspaceId = workspace.id;
+      } else {
+        nextWorkspaceId = null;
+      }
+    }
     return this.prisma.$transaction(async (tx) => {
       const project = await tx.project.update({
         where: { id },
@@ -111,6 +136,7 @@ export class ProjectsService {
           ...(input.name ? { name: input.name.trim() } : {}),
           ...(input.description !== undefined ? { description: input.description?.trim() ?? null } : {}),
           ...(input.status ? { status: input.status as RecordStatus } : {}),
+          ...(nextWorkspaceId !== undefined ? { workspaceId: nextWorkspaceId } : {}),
         },
       });
       await tx.auditLog.create({
@@ -139,24 +165,47 @@ export class ProjectsService {
 
   async listMembers(projectId: string, actor: Principal) {
     const project = await this.accessControl().requireProject(actor, projectId, true);
+    if (!project.workspaceId) {
+      const memberships = await this.prisma.clientMembership.findMany({
+        where: { tenantId: project.tenantId, status: MembershipStatus.ACTIVE },
+        select: {
+          id: true, tenantId: true, userId: true, role: true, status: true, createdAt: true, updatedAt: true,
+          user: { select: { id: true, tenantId: true, name: true, email: true, role: true, status: true, createdAt: true } },
+          projectPermissions: {
+            where: { projectId }, select: { feature: true, level: true, effect: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      return memberships.map(({ projectPermissions, ...membership }) => ({
+        ...membership,
+        permissions: projectPermissions,
+        workspacePermissions: [],
+        effectivePermissions: projectPermissions,
+      }));
+    }
     const memberships = await this.prisma.workspaceMembership.findMany({
       where: { workspaceId: project.workspaceId, status: MembershipStatus.ACTIVE },
       select: {
         id: true, tenantId: true, workspaceId: true, userId: true, role: true, status: true, createdAt: true, updatedAt: true,
-        user: { select: { id: true, tenantId: true, name: true, email: true, role: true, status: true, createdAt: true } },
-        workspacePermissions: { select: { feature: true, level: true, effect: true } },
-        projectPermissions: {
-          where: { projectId }, select: { feature: true, level: true, effect: true },
+        user: {
+          select: {
+            id: true, tenantId: true, name: true, email: true, role: true, status: true, createdAt: true,
+            projectPermissions: {
+              where: { projectId }, select: { feature: true, level: true, effect: true },
+            },
+          },
         },
+        workspacePermissions: { select: { feature: true, level: true, effect: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
-    return memberships.map(({ workspacePermissions, projectPermissions, ...membership }) => {
+    return memberships.map(({ workspacePermissions, user: { projectPermissions, ...user }, ...membership }) => {
       const overrides = new Map(projectPermissions.map((permission) => [permission.feature, permission]));
       const inherited = new Map(workspacePermissions.map((permission) => [permission.feature, permission]));
       const features = new Set([...overrides.keys(), ...inherited.keys()]);
       return {
-        ...membership,
+        ...membership, user,
         permissions: projectPermissions,
         workspacePermissions,
         effectivePermissions: [...features].map((feature) => overrides.get(feature) ?? inherited.get(feature)!),
@@ -167,7 +216,7 @@ export class ProjectsService {
   async addMember(projectId: string, input: AddMemberInput, actor: Principal) {
     const project = await this.accessControl().requireProject(actor, projectId, true);
     this.assertCanGrant(input.permission, actor);
-    await this.requireWorkspaceUser(input.userId, project.tenantId, project.workspaceId);
+    await this.requireClientUser(input.userId, project.tenantId);
     try {
       return await this.prisma.$transaction(async (tx) => {
         const membership = await tx.projectMembership.create({
@@ -220,7 +269,7 @@ export class ProjectsService {
 
   async replaceFunctionalPermissions(projectId: string, userId: string, input: ReplaceProjectPermissionsInput, actor: Principal) {
     const project = await this.accessControl().requireProject(actor, projectId, true);
-    await this.requireWorkspaceUser(userId, project.tenantId, project.workspaceId);
+    await this.requireClientUser(userId, project.tenantId);
     return this.prisma.$transaction(async (tx) => {
       await tx.projectFunctionalPermission.deleteMany({
         where: {
@@ -233,7 +282,7 @@ export class ProjectsService {
           where: { projectId_userId_feature: { projectId, userId, feature: permission.feature as Feature } },
           update: { level: permission.level as PermissionLevel, effect: permission.effect as PermissionEffect },
           create: {
-            tenantId: project.tenantId, workspaceId: project.workspaceId, projectId, userId,
+            tenantId: project.tenantId, projectId, userId,
             feature: permission.feature as Feature, level: permission.level as PermissionLevel,
             effect: permission.effect as PermissionEffect,
           },
@@ -275,7 +324,7 @@ export class ProjectsService {
     if (sourceProject.tenantId !== destinationProject.tenantId && !this.accessControl().isSuper(actor)) {
       throw new BadRequestException('Não é permitido mover membros entre organizações.');
     }
-    await this.requireWorkspaceUser(input.userId, destinationProject.tenantId, destinationProject.workspaceId);
+    await this.requireClientUser(input.userId, destinationProject.tenantId);
     const source = await this.prisma.projectMembership.findFirst({
       where: { projectId: fromProjectId, userId: input.userId }, select: { id: true },
     });
@@ -301,24 +350,13 @@ export class ProjectsService {
     });
   }
 
-  private async defaultWorkspace(actor: Principal) {
-    if (!actor.tenantId) throw new NotFoundException('Informe o workspace do projeto.');
-    const workspace = await this.prisma.workspace.findFirst({
-      where: { tenantId: actor.tenantId, isDefault: true, status: RecordStatus.ACTIVE },
-      select: { id: true, tenantId: true, name: true, slug: true, status: true, isDefault: true },
+  private async requireClientUser(userId: string, tenantId: string) {
+    const membership = await this.prisma.clientMembership.findUnique({
+      where: { tenantId_userId: { tenantId, userId } },
+      select: { status: true },
     });
-    if (!workspace) throw new NotFoundException('Workspace padrão não encontrado.');
-    return workspace;
-  }
-
-  private async requireWorkspaceUser(userId: string, tenantId: string, workspaceId: string) {
-    const membership = await this.prisma.workspaceMembership.findUnique({
-      where: { workspaceId_userId: { workspaceId, userId } },
-      select: { status: true, clientMembership: { select: { tenantId: true, status: true } } },
-    });
-    if (!membership || membership.status !== MembershipStatus.ACTIVE
-      || membership.clientMembership.tenantId !== tenantId || membership.clientMembership.status !== MembershipStatus.ACTIVE) {
-      throw new NotFoundException('Usuário não possui vínculo ativo com o workspace.');
+    if (!membership || membership.status !== MembershipStatus.ACTIVE) {
+      throw new NotFoundException('Usuário não possui vínculo ativo com a organização.');
     }
   }
 
