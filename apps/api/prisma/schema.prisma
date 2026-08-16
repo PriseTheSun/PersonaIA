@@ -481,6 +481,9 @@ model AuditLog {
 
   @@index([tenantId, createdAt])
   @@index([actorId, createdAt])
+  @@index([createdAt(sort: Desc), id(sort: Desc)])
+  @@index([action, createdAt])
+  @@index([targetType, createdAt])
   @@index([scopeType, scopeId, createdAt])
 }
 

@@ -1,28 +1,25 @@
-import { Ban, CheckCircle2, CircleX, KeyRound, MoreHorizontal, RotateCcw, ShieldCheck, UserRoundCog } from 'lucide-react';
+import { CheckCircle2, ShieldCheck } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { z } from 'zod';
-import { Avatar } from '@/components/shared/avatar';
 import { DataRegion } from '@/components/shared/data-region';
 import { FormDialog } from '@/components/shared/form-dialog';
-import { InlineForm, MutationNotice } from '@/components/shared/inline-form';
+import { MutationNotice } from '@/components/shared/inline-form';
 import { PageHeader } from '@/components/shared/page-header';
 import { ScopeSelector } from '@/components/shared/scope-selector';
 import { SearchField } from '@/components/shared/search-field';
 import { EmptyState, ErrorState, LoadingRows } from '@/components/shared/states';
-import { StatusBadge } from '@/components/shared/status-badge';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/features/auth/auth-store';
 import { useActiveScope } from '@/hooks/use-active-scope';
 import { useApiQuery } from '@/hooks/use-api-query';
 import { ApiError, apiRequest, csrfHeaders } from '@/lib/api';
 import { clientMembershipSchema, paginatedSchema, platformIdentitySchema, projectSchema, tenantSchema, type ClientMembership, type ClientRole, type MembershipStatus, type PlatformIdentity, type Project, type Tenant } from '@/lib/schemas';
-import { formatDate } from '@/lib/utils';
+import { ClientAccessTable, PlatformAccessTable } from './access-control-tables';
+import { isPendingAccess } from './access-control-utils';
 
 const responseSchema = z.union([z.array(clientMembershipSchema), paginatedSchema(clientMembershipSchema)]).transform((value) => Array.isArray(value) ? value : value.items);
 const platformResponseSchema = z.union([z.array(platformIdentitySchema), paginatedSchema(platformIdentitySchema)]).transform((value) => Array.isArray(value) ? value : value.items);
@@ -33,13 +30,9 @@ type Filter = typeof filters[number];
 type EditableStatus = Extract<MembershipStatus, 'ACTIVE' | 'SUSPENDED' | 'REMOVED'>;
 type AccessView = 'CLIENT' | 'PLATFORM';
 
-function isPending(status: MembershipStatus) {
-  return status === 'PENDING' || status === 'PENDING_APPROVAL' || status === 'INVITED';
-}
-
 function matchesFilter(status: MembershipStatus, filter: Filter) {
   if (filter === 'ALL') return true;
-  if (filter === 'PENDING') return isPending(status);
+  if (filter === 'PENDING') return isPendingAccess(status);
   return status === filter;
 }
 
@@ -101,9 +94,9 @@ export function AccessControlPage() {
       await apiRequest(`/tenants/${encodeURIComponent(tenantId)}/memberships/${encodeURIComponent(membership.userId)}`, z.unknown(), {
         method: 'PATCH', headers: csrfHeaders(), body: input,
       });
-      toast.success(input.status === 'ACTIVE' && isPending(membership.status)
+      toast.success(input.status === 'ACTIVE' && isPendingAccess(membership.status)
         ? t('accessControl.approved')
-        : input.status === 'REMOVED' && isPending(membership.status)
+        : input.status === 'REMOVED' && isPendingAccess(membership.status)
           ? t('accessControl.rejected')
           : t('accessControl.updated'));
       setEditingId(null);
@@ -141,14 +134,19 @@ export function AccessControlPage() {
       ) : null}
       {view === 'CLIENT' ? <ScopeSelector includeWorkspace={false} /> : null}
       {view === 'CLIENT' && editingMembership ? (
-        <InlineForm title={t('accessControl.editTitle', { name: editingMembership.user.name })} description={t('accessControl.editDescription')} onClose={() => setEditingId(null)}>
+        <FormDialog
+          open
+          onOpenChange={(open) => { if (!open) setEditingId(null); }}
+          title={t('accessControl.editTitle', { name: editingMembership.user.name })}
+          description={t('accessControl.editDescription')}
+        >
           <AccessEditor
             membership={editingMembership}
             loading={mutatingId === editingMembership.userId}
             onCancel={() => setEditingId(null)}
             onSave={(input) => void updateMembership(editingMembership, input)}
           />
-        </InlineForm>
+        </FormDialog>
       ) : null}
       {view === 'CLIENT' && approvalMembership ? (
         <FormDialog
@@ -169,7 +167,12 @@ export function AccessControlPage() {
         </FormDialog>
       ) : null}
       {view === 'PLATFORM' && editingPlatformIdentity ? (
-        <InlineForm title={t('accessControl.editPlatformTitle', { name: editingPlatformIdentity.name })} description={t('accessControl.editPlatformDescription')} onClose={() => setEditingPlatformId(null)}>
+        <FormDialog
+          open
+          onOpenChange={(open) => { if (!open) setEditingPlatformId(null); }}
+          title={t('accessControl.editPlatformTitle', { name: editingPlatformIdentity.name })}
+          description={t('accessControl.editPlatformDescription')}
+        >
           <PlatformAccessEditor
             identity={editingPlatformIdentity}
             tenants={tenantsQuery.status === 'success' ? tenantsQuery.data : []}
@@ -179,10 +182,10 @@ export function AccessControlPage() {
             onCancel={() => setEditingPlatformId(null)}
             onSave={(input) => void updatePlatformIdentity(editingPlatformIdentity, input)}
           />
-        </InlineForm>
+        </FormDialog>
       ) : null}
       {view === 'PLATFORM' ? (
-        <PlatformIdentityList
+        <PlatformAccessTable
           items={platformItems}
           status={platformQuery.status}
           currentUserId={auth.status === 'authenticated' ? auth.user.id : ''}
@@ -207,50 +210,14 @@ export function AccessControlPage() {
           : query.status === 'loading' ? <LoadingRows />
             : query.status === 'error' ? <ErrorState onRetry={query.retry} />
               : items.length === 0 ? <EmptyState title={search ? t('common.noResults') : t('accessControl.empty')} description={t('accessControl.emptyDescription')} />
-                : (
-                  <ul className="divide-y">
-                    {items.map((membership) => {
-                      const isSelf = auth.status === 'authenticated' && auth.user.id === membership.userId;
-                      const canManage = !isSelf;
-                      return (
-                        <li key={membership.userId} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:px-5">
-                          <div className="flex min-w-0 flex-1 items-center gap-3">
-                            <Avatar name={membership.user.name} />
-                            <div className="min-w-0">
-                              <h2 className="truncate text-sm font-semibold">{membership.user.name}{isSelf ? <span className="ml-2 text-xs font-normal text-muted-foreground">{t('accessControl.you')}</span> : null}</h2>
-                              <p className="truncate text-xs text-muted-foreground">{membership.user.email}</p>
-                              {membership.requestedProject ? <Badge variant="outline" className="mt-1.5 max-w-full gap-1 bg-card font-normal"><KeyRound className="size-3" aria-hidden="true" /><span className="truncate">{t('accessControl.requestedProject', { name: membership.requestedProject.name })}</span></Badge> : null}
-                              {membership.createdAt ? <time className="mt-1 block text-xs text-muted-foreground" dateTime={membership.createdAt}>{formatDate(membership.createdAt, i18n.language)}</time> : null}
-                            </div>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                            <span className="text-xs font-medium">{t(`roles.${membership.role}`)}</span>
-                            <StatusBadge status={membership.status} />
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                            {isPending(membership.status) && canManage ? (
-                              <>
-                                <Button size="sm" onClick={() => setApprovalId(membership.userId)} loading={mutatingId === membership.userId}><CheckCircle2 />{t('accessControl.approve')}</Button>
-                                <Button size="sm" variant="outline" onClick={() => void updateMembership(membership, { status: 'REMOVED' })} disabled={mutatingId === membership.userId}><CircleX />{t('accessControl.reject')}</Button>
-                              </>
-                            ) : null}
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" disabled={!canManage || mutatingId === membership.userId} aria-label={`${t('common.actions')}: ${membership.user.name}`}><MoreHorizontal /></Button></DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onSelect={() => setEditingId(membership.userId)}><UserRoundCog />{t('accessControl.editAccess')}</DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                                {membership.status !== 'ACTIVE'
-                                  ? <DropdownMenuItem onSelect={() => isPending(membership.status) ? setApprovalId(membership.userId) : void updateMembership(membership, { status: 'ACTIVE' })}><RotateCcw />{isPending(membership.status) ? t('accessControl.approve') : t('accessControl.activate')}</DropdownMenuItem>
-                                  : <DropdownMenuItem className="text-destructive" onSelect={() => void updateMembership(membership, { status: 'SUSPENDED' })}><Ban />{t('accessControl.deactivate')}</DropdownMenuItem>}
-                                {isPending(membership.status) ? <DropdownMenuItem className="text-destructive" onSelect={() => void updateMembership(membership, { status: 'REMOVED' })}><CircleX />{t('accessControl.reject')}</DropdownMenuItem> : null}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
+                : <ClientAccessTable
+                  items={items}
+                  currentUserId={auth.status === 'authenticated' ? auth.user.id : ''}
+                  mutatingId={mutatingId}
+                  onEdit={setEditingId}
+                  onApprove={setApprovalId}
+                  onStatusChange={(membership, status) => void updateMembership(membership, { status })}
+                />}
       </DataRegion>}
     </div>
   );
@@ -279,35 +246,13 @@ function AccessApprovalForm({ membership, projects, projectsStatus, onRetryProje
   );
 }
 
-function PlatformIdentityList({ items, status, currentUserId, mutatingId, onRetry, onEdit }: { items: PlatformIdentity[]; status: 'loading' | 'success' | 'error'; currentUserId: string; mutatingId: string | null; onRetry: () => void; onEdit: (id: string) => void }) {
-  const { t, i18n } = useTranslation();
-  return (
-    <DataRegion>
-      {status === 'loading' ? <LoadingRows /> : status === 'error' ? <ErrorState onRetry={onRetry} /> : items.length === 0 ? <EmptyState title={t('accessControl.empty')} description={t('accessControl.platformEmptyDescription')} /> : (
-        <ul className="divide-y">
-          {items.map((identity) => {
-            const isSelf = identity.id === currentUserId;
-            return (
-              <li key={identity.id} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:px-5">
-                <div className="flex min-w-0 flex-1 items-center gap-3"><Avatar name={identity.name} /><div className="min-w-0"><h2 className="truncate text-sm font-semibold">{identity.name}{isSelf ? <span className="ml-2 text-xs font-normal text-muted-foreground">{t('accessControl.you')}</span> : null}</h2><p className="truncate text-xs text-muted-foreground">{identity.email}</p>{identity.createdAt ? <time className="mt-1 block text-xs text-muted-foreground" dateTime={identity.createdAt}>{formatDate(identity.createdAt, i18n.language)}</time> : null}</div></div>
-                <div className="flex flex-wrap items-center gap-2"><span className="text-xs font-medium">{t(`roles.${identity.role}`)}</span><StatusBadge status={identity.status} /><span className="text-xs text-muted-foreground">{t('accessControl.membershipCount', { count: identity.membershipCount })}</span></div>
-                <Button variant="ghost" size="icon" disabled={isSelf || mutatingId === identity.id} onClick={() => onEdit(identity.id)} aria-label={`${t('accessControl.editAccess')}: ${identity.name}`}><UserRoundCog /></Button>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </DataRegion>
-  );
-}
-
 function PlatformAccessEditor({ identity, tenants, tenantsStatus, onRetryTenants, loading, onCancel, onSave }: { identity: PlatformIdentity; tenants: Tenant[]; tenantsStatus: 'loading' | 'success' | 'error'; onRetryTenants: () => void; loading: boolean; onCancel: () => void; onSave: (input: { status: 'ACTIVE' | 'SUSPENDED' | 'ARCHIVED'; role: 'SUPER_ADMIN' | 'PROJECT_USER'; tenantId?: string | null }) => void }) {
   const { t } = useTranslation();
   const [status, setStatus] = useState<'ACTIVE' | 'SUSPENDED' | 'ARCHIVED'>(identity.status === 'SUSPENDED' ? 'SUSPENDED' : identity.status === 'REMOVED' || identity.status === 'ARCHIVED' ? 'ARCHIVED' : 'ACTIVE');
   const [role, setRole] = useState<'SUPER_ADMIN' | 'PROJECT_USER'>(identity.role === 'SUPER_ADMIN' ? 'SUPER_ADMIN' : 'PROJECT_USER');
   const activeMemberships = identity.clientMemberships.filter((membership) => membership.status === 'ACTIVE');
-  const pendingMemberships = identity.clientMemberships.filter((membership) => isPending(membership.status));
-  const availableTenants = isPending(identity.status) && pendingMemberships.length === 0
+  const pendingMemberships = identity.clientMemberships.filter((membership) => isPendingAccess(membership.status));
+  const availableTenants = isPendingAccess(identity.status) && pendingMemberships.length === 0
     ? tenants.filter((tenant) => tenant.status === 'ACTIVE').map((tenant) => ({ id: tenant.id, name: tenant.name, role: null }))
     : [...activeMemberships, ...pendingMemberships].map((membership) => ({ id: membership.tenantId, name: membership.tenant.name, role: membership.role }));
   const [tenantId, setTenantId] = useState(identity.tenantId ?? activeMemberships[0]?.tenantId ?? pendingMemberships[0]?.tenantId ?? '');

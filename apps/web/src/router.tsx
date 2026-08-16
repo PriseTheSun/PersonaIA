@@ -18,6 +18,7 @@ const PersonasPage = lazy(() => import('@/features/assets/personas-page').then((
 const QuestionnairesPage = lazy(() => import('@/features/assets/questionnaires-page').then((module) => ({ default: module.QuestionnairesPage })));
 const AccessControlPage = lazy(() => import('@/features/access-control/access-control-page').then((module) => ({ default: module.AccessControlPage })));
 const PreferencesPage = lazy(() => import('@/features/preferences/preferences-page').then((module) => ({ default: module.PreferencesPage })));
+const AuditPage = lazy(() => import('@/features/audit/audit-page').then((module) => ({ default: module.AuditPage })));
 const ForbiddenPage = lazy(() => import('@/features/errors/error-pages').then((module) => ({ default: module.ForbiddenPage })));
 const NotFoundPage = lazy(() => import('@/features/errors/error-pages').then((module) => ({ default: module.NotFoundPage })));
 
@@ -35,7 +36,7 @@ export const router = createBrowserRouter([
           children: [
             { index: true, element: <RouteLoading><DashboardPage /></RouteLoading> },
             { path: 'preferences', element: <RouteLoading><PreferencesPage /></RouteLoading> },
-            { element: <RoleGuard allow={['SUPER_ADMIN']} />, children: [{ path: 'tenants', element: <RouteLoading><TenantsPage /></RouteLoading> }, { path: 'administrators', element: <RouteLoading><AdminsPage /></RouteLoading> }] },
+            { element: <RoleGuard allow={['SUPER_ADMIN']} />, children: [{ path: 'tenants', element: <RouteLoading><TenantsPage /></RouteLoading> }, { path: 'administrators', element: <RouteLoading><AdminsPage /></RouteLoading> }, { path: 'audit', element: <RouteLoading><AuditPage /></RouteLoading> }] },
             { element: <RoleGuard allow={['SUPER_ADMIN', 'CLIENT_ADMIN', 'WORKSPACE_ADMIN', 'WORKSPACE_MEMBER', 'PROJECT_USER']} />, children: [{ path: 'workspaces', element: <RouteLoading><WorkspacesPage /></RouteLoading> }, { path: 'projects', element: <RouteLoading><ProjectsPage /></RouteLoading> }, { path: 'personas', element: <RouteLoading><PersonasPage /></RouteLoading> }, { path: 'questionnaires', element: <RouteLoading><QuestionnairesPage /></RouteLoading> }] },
             { element: <RoleGuard allow={['SUPER_ADMIN', 'CLIENT_ADMIN', 'WORKSPACE_ADMIN']} />, children: [{ path: 'users', element: <RouteLoading><UsersPage /></RouteLoading> }, { path: 'permissions', element: <RouteLoading><PermissionsPage /></RouteLoading> }] },
             { element: <RoleGuard allow={['SUPER_ADMIN', 'CLIENT_ADMIN']} />, children: [{ path: 'access-control', element: <RouteLoading><AccessControlPage /></RouteLoading> }] },

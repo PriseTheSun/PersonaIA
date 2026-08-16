@@ -6,13 +6,13 @@ import { I18nProvider } from '@/i18n/i18n-provider';
 import { AuthContext } from '@/features/auth/auth-store';
 import { AppShell } from './app-shell';
 
-function renderShell() {
+function renderShell(role: 'SUPER_ADMIN' | 'CLIENT_ADMIN' = 'SUPER_ADMIN') {
   return render(
     <I18nProvider>
       <MemoryRouter>
         <AuthContext.Provider value={{
           status: 'authenticated',
-          user: { id: 'user-1', name: 'Admin PersonaIA', email: 'admin@personaia.test', role: 'SUPER_ADMIN', status: 'ACTIVE' },
+          user: { id: 'user-1', name: 'Admin PersonaIA', email: 'admin@personaia.test', role, status: 'ACTIVE' },
           login: vi.fn(),
           logout: vi.fn(),
           refresh: vi.fn(),
@@ -85,6 +85,12 @@ describe('AppShell', () => {
     expect(within(accessLink).getByText('Controle de acessos')).toBeVisible();
     expect(overviewLink).toHaveAttribute('data-active', 'true');
     expect(overviewLink).toHaveClass('data-[active=true]:bg-sidebar-primary', 'data-[active=true]:text-sidebar-primary-foreground');
+    expect(screen.getByRole('link', { name: 'Auditoria' })).toHaveAttribute('href', '/audit');
+  });
+
+  it('hides the audit navigation from organization administrators', () => {
+    renderShell('CLIENT_ADMIN');
+    expect(screen.queryByRole('link', { name: 'Auditoria' })).not.toBeInTheDocument();
   });
 
   it('opens the notification panel with an accessible empty state', async () => {

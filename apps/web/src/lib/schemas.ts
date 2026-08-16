@@ -336,3 +336,33 @@ export const notificationsResponseSchema = z.object({
   items: z.array(notificationSchema),
   unreadCount: z.number().int().nonnegative(),
 });
+
+export const auditLogSchema = z.object({
+  id: z.string().uuid(),
+  action: z.string().min(1),
+  targetType: z.string().min(1),
+  targetId: z.string().uuid().nullable(),
+  scopeType: z.string().nullable(),
+  scopeId: z.string().uuid().nullable(),
+  metadata: z.unknown().nullable(),
+  createdAt: z.string().datetime(),
+  actor: z.object({ id: z.string().uuid(), name: z.string().min(1), email: z.string().email() }).nullable(),
+  tenant: z.object({ id: z.string().uuid(), name: z.string().min(1), slug: z.string().min(1) }).nullable(),
+});
+export type AuditLog = z.infer<typeof auditLogSchema>;
+
+export const auditResponseSchema = z.object({
+  items: z.array(auditLogSchema),
+  pagination: z.object({
+    page: z.number().int().min(1),
+    pageSize: z.number().int().min(10).max(100),
+    total: z.number().int().nonnegative(),
+    totalPages: z.number().int().min(1),
+  }),
+  filters: z.object({
+    actions: z.array(z.string()),
+    targetTypes: z.array(z.string()),
+    tenants: z.array(z.object({ id: z.string().uuid(), name: z.string().min(1), slug: z.string().min(1) })),
+  }),
+});
+export type AuditResponse = z.infer<typeof auditResponseSchema>;

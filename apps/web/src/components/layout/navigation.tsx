@@ -1,4 +1,4 @@
-import { ClipboardList, FolderKanban, Gauge, KeyRound, PanelsTopLeft, ScanFace, ShieldCheck, Users, Building2, UserRoundCog } from 'lucide-react';
+import { ClipboardList, FolderKanban, Gauge, KeyRound, PanelsTopLeft, ScanFace, ScrollText, ShieldCheck, Users, Building2, UserRoundCog } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { NavLink, useLocation } from 'react-router-dom';
 import type { Role } from '@/lib/schemas';
@@ -13,6 +13,7 @@ const platformItems = [
   { to: '/access-control', label: 'nav.accessControl', icon: UserRoundCog, roles: ['SUPER_ADMIN', 'CLIENT_ADMIN'] },
   { to: '/tenants', label: 'nav.tenants', icon: Building2, roles: ['SUPER_ADMIN'] },
   { to: '/administrators', label: 'nav.admins', icon: ShieldCheck, roles: ['SUPER_ADMIN'] },
+  { to: '/audit', label: 'nav.audit', icon: ScrollText, roles: ['SUPER_ADMIN'] },
 ] satisfies NavigationItem[];
 
 const workspaceItems = [

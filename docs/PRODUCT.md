@@ -12,6 +12,14 @@ O sistema atende equipes que criam e administram personas genéricas para respon
 
 Centralizar a criação e a organização de personas para pesquisas em um SaaS multi-tenant seguro. O produto deve permitir que tarefas administrativas recorrentes — criar uma organização, organizar projetos, mover usuários e ajustar permissões — sejam concluídas em poucos cliques, com isolamento de dados verificável e uma base preparada para a futura definição da matriz completa de acessos.
 
+## Capacidades administrativas globais
+
+- Somente o `SUPER_ADMIN` consulta a auditoria global da plataforma.
+- A auditoria reúne todos os eventos persistidos no registro append-only, com ator,
+  organização, ação, recurso, escopo, horário UTC e metadados seguros disponíveis.
+- Busca, filtros por organização/evento/recurso/período e paginação são processados
+  no servidor. Abrir ou filtrar a auditoria também gera um evento auditável.
+
 ## Brand Personality
 
 Clean, elegante e minimalista. A voz é clara, serena e precisa: transmite confiança sem parecer burocrática e facilita decisões sem chamar atenção para a própria interface.

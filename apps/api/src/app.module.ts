@@ -20,6 +20,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module';
 import { AssetsModule } from './assets/assets.module';
 import { PreferencesModule } from './preferences/preferences.module';
 import { InvitationsModule } from './invitations/invitations.module';
+import { AuditModule } from './audit/audit.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { InvitationsModule } from './invitations/invitations.module';
     AssetsModule,
     PreferencesModule,
     InvitationsModule,
+    AuditModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: OriginGuard },

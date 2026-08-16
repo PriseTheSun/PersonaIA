@@ -38,6 +38,7 @@ interface. Teste unitário com mock não comprova isolamento, transação ou con
 | CA-10 | duas requisições simultâneas removem/suspendem os últimos admins | no máximo uma operação pode deixar de existir; cliente conserva CLIENT_ADMIN ativo e workspace conserva WORKSPACE_ADMIN efetivo; sem estado intermediário inválido | RN-01, RN-02, RN-13 | P1 |
 | CA-11 | membro READ tenta WRITE; membro WRITE tenta ADMIN | READ não cria/edita; WRITE cria/edita mas não configura permissões; respostas não persistem efeito e geram auditoria de segurança conforme política | RN-04, RN-05 | P1 |
 | CA-12 | SUPER_ADMIN vincula UM a A e B | uma identidade/e-mail global, duas memberships independentes; trocar estado/papel/permissão em A não altera B nem exige novo login para fazer efeito | RN-03, RN-05, RN-10, RN-14 | P0 |
+| CA-13 | SUPER_ADMIN consulta e filtra a auditoria global | todos os eventos persistidos são paginados em ordem estável; detalhes sensíveis são redigidos; CLIENT_ADMIN/anônimo recebem `403`/`401`; a própria leitura gera `AUDIT_LOGS_VIEWED` | RN-04, RN-14 | P1 |
 
 ### Dívida de modelagem aceita nesta versão
 

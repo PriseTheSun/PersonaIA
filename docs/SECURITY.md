@@ -177,6 +177,16 @@ Não registrar senha, token, cookie, segredo, respostas de pesquisa completas ou
 desnecessária. Redigir headers e campos sensíveis no logger e no APM. Proteger os
 logs contra alteração, controlar acesso e definir retenção alinhada à LGPD.
 
+A consulta global de auditoria é uma superfície exclusiva de `SUPER_ADMIN`, com
+autorização explícita no backend e navegação protegida no frontend. A API aplica
+paginação limitada, filtros allowlisted e busca parametrizada; metadados retornados
+passam por redação defensiva de chaves de senha, token, cookie, sessão, credencial,
+segredo e autorização. Cada consulta bem-sucedida registra `AUDIT_LOGS_VIEWED` sem
+copiar o texto pesquisado, evitando que PII digitada no filtro seja duplicada no log.
+A tela representa todos os eventos persistidos em `AuditLog`; console de aplicação,
+stdout de containers e APM continuam superfícies operacionais separadas e não devem
+ser apresentados como auditoria imutável de negócio.
+
 Alertas mínimos: brute force, reutilização de refresh token, volume anormal de
 `401/403/404`, tentativa de acesso a múltiplos tenants e ação global fora do padrão.
 

@@ -55,7 +55,13 @@ describe('AccessControlPage project assignment', () => {
       </I18nProvider>,
     );
 
-    await user.click(screen.getByRole('button', { name: 'Aprovar' }));
+    expect(screen.getByRole('columnheader', { name: 'Usuário' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Perfil' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'Projeto solicitado' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Aprovar' })).not.toBeInTheDocument();
+
+    await user.click(screen.getAllByRole('button', { name: 'Ações: Pessoa Teste' })[0]);
+    await user.click(await screen.findByRole('menuitem', { name: 'Aprovar' }));
     expect(screen.getByRole('dialog')).toHaveTextContent('Aprovar acesso de Pessoa Teste');
     await user.selectOptions(screen.getByRole('combobox', { name: 'Projeto inicial (opcional)' }), projectId);
     await user.click(screen.getByRole('button', { name: 'Aprovar acesso' }));
@@ -65,5 +71,10 @@ describe('AccessControlPage project assignment', () => {
       expect.anything(),
       expect.objectContaining({ method: 'PATCH', body: { status: 'ACTIVE', projectId } }),
     ));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    await user.click(screen.getAllByRole('button', { name: 'Ações: Pessoa Teste' })[0]);
+    await user.click(await screen.findByRole('menuitem', { name: 'Alterar acesso' }));
+    expect(screen.getByRole('dialog')).toHaveTextContent('Acesso de Pessoa Teste');
   });
 });

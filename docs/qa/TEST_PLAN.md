@@ -142,6 +142,17 @@ parametrizados a partir dela. Endpoint protegido sem policy é falha de release.
 Regras de banco críticas devem ser testadas com SQL/integration test direto, sem
 passar apenas pelo controller.
 
+### Auditoria global
+
+| ID | Cenário | Resultado esperado |
+|---|---|---|
+| AUD-001 | anônimo, CLIENT_ADMIN e SUPER_ADMIN consultam `/audit-logs` | `401`, `403` e sucesso, respectivamente; nenhum dado é retornado aos dois primeiros |
+| AUD-002 | paginação ausente, inválida e acima do máximo | defaults `1/25`; valores inválidos ou `pageSize > 100` são rejeitados |
+| AUD-003 | filtros combinados de busca, organização, evento, recurso e período | resultado e total correspondem aos filtros; datas incluem o dia final em UTC |
+| AUD-004 | metadata histórica contém chave de senha/token/cookie/sessão/segredo | valor retorna como `[REDACTED]`; resposta não contém o segredo original |
+| AUD-005 | SUPER_ADMIN abre ou filtra a auditoria | nova entrada `AUDIT_LOGS_VIEWED` registra ator, página e presença dos filtros, sem duplicar o texto buscado |
+| AUD-006 | tela em 320×480, claro/escuro e pt-BR/es/en | lista mobile não cria overflow; filtros e detalhes funcionam por teclado; console permanece limpo |
+
 ## 6. Input, dados e robustez
 
 | ID | Teste | Resultado esperado |
