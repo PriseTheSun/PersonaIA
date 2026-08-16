@@ -1,4 +1,4 @@
-import { hashToken, normalizeEmail, normalizeSlug } from './security';
+import { hashToken, normalizeEmail, normalizeSlug, redactUser } from './security';
 
 describe('security helpers', () => {
   it('normalizes identifiers deterministically', () => {
@@ -10,5 +10,21 @@ describe('security helpers', () => {
     const raw = 'refresh.jwt.value';
     expect(hashToken(raw)).not.toContain(raw);
     expect(hashToken(raw)).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it('never exposes password hashes or avatar bytes in user responses', () => {
+    const safe = redactUser({
+      id: 'user-1',
+      passwordHash: 'secret-hash',
+      tokenVersion: 4,
+      avatarData: Uint8Array.from([1, 2, 3]),
+      avatarMimeType: 'image/png',
+      avatarUpdatedAt: new Date('2026-08-15T12:00:00.000Z'),
+    });
+    expect(safe).not.toHaveProperty('passwordHash');
+    expect(safe).not.toHaveProperty('tokenVersion');
+    expect(safe).not.toHaveProperty('avatarData');
+    expect(safe).not.toHaveProperty('avatarMimeType');
+    expect(safe).toEqual(expect.objectContaining({ hasAvatar: true }));
   });
 });

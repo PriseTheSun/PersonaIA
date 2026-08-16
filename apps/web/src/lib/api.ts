@@ -118,6 +118,23 @@ export async function apiVoid(path: string, options: RequestOptions = {}): Promi
   }
 }
 
+export async function apiBlob(path: string, options: RequestOptions = {}): Promise<Blob> {
+  const response = await fetchApi(path, {
+    ...options,
+    headers: { Accept: 'image/png,image/jpeg', ...options.headers },
+  });
+  if (!response.ok) {
+    const payload: unknown = isJsonResponse(response) ? await response.json() : null;
+    const parsed = z.object({ code: z.string().optional(), message: z.string().optional() }).safeParse(payload);
+    throw new ApiError(
+      response.status,
+      parsed.success ? parsed.data.code ?? 'REQUEST_FAILED' : 'REQUEST_FAILED',
+      parsed.success ? parsed.data.message ?? response.statusText : response.statusText,
+    );
+  }
+  return response.blob();
+}
+
 export function getCsrfToken() {
   return document.cookie
     .split('; ')

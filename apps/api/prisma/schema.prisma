@@ -114,6 +114,9 @@ model User {
   email                String                        @unique @db.VarChar(254)
   name                 String                        @db.VarChar(120)
   passwordHash         String                        @db.VarChar(255)
+  avatarData           Bytes?                        @db.ByteA
+  avatarMimeType       String?                       @db.VarChar(32)
+  avatarUpdatedAt      DateTime?
   role                 Role                          @default(PROJECT_USER)
   status               RecordStatus                  @default(ACTIVE)
   tokenVersion         Int                           @default(0)

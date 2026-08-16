@@ -18,6 +18,7 @@ import { TenantsModule } from './tenants/tenants.module';
 import { UsersModule } from './users/users.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
 import { AssetsModule } from './assets/assets.module';
+import { PreferencesModule } from './preferences/preferences.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { AssetsModule } from './assets/assets.module';
     UsersModule,
     WorkspacesModule,
     AssetsModule,
+    PreferencesModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: OriginGuard },

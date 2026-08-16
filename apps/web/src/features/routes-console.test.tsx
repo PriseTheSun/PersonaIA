@@ -8,6 +8,7 @@ import { AdminsPage } from '@/features/admins/admins-page';
 import { PersonasPage } from '@/features/assets/personas-page';
 import { QuestionnairesPage } from '@/features/assets/questionnaires-page';
 import { PermissionsPage } from '@/features/permissions/permissions-page';
+import { PreferencesPage } from '@/features/preferences/preferences-page';
 import { ProjectsPage } from '@/features/projects/projects-page';
 import { ForbiddenPage, NotFoundPage } from '@/features/errors/error-pages';
 import { TenantsPage } from '@/features/tenants/tenants-page';
@@ -22,6 +23,7 @@ vi.mock('@/lib/api', () => ({
   ApiError: class ApiError extends Error {},
   apiRequest: vi.fn(),
   apiVoid: vi.fn(),
+  apiBlob: vi.fn(),
   csrfHeaders: vi.fn(() => ({})),
   setScopeContext: vi.fn(),
 }));
@@ -60,6 +62,7 @@ describe('authenticated routes remain console-clean', () => {
     ['personas', PersonasPage, 'Personas'],
     ['questionnaires', QuestionnairesPage, 'Questionários'],
     ['access-control', AccessControlPage, 'Controle de acessos'],
+    ['preferences', PreferencesPage, 'Preferências'],
     ['403', ForbiddenPage, 'Você não tem acesso a esta área'],
     ['404', NotFoundPage, 'Página não encontrada'],
   ] as const)('renders %s without console warnings or errors', (_route, Page, title) => {

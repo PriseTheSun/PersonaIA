@@ -7,4 +7,6 @@ export interface Principal {
   name: string;
   role: AppRole;
   tokenVersion: number;
+  hasAvatar?: boolean;
+  avatarUpdatedAt?: Date | null;
 }

@@ -83,6 +83,8 @@ export const userSchema = z.object({
   role: roleSchema.default('PROJECT_USER'),
   tenantId: z.string().nullable().optional(),
   status: membershipStatusSchema.default('ACTIVE'),
+  hasAvatar: z.boolean().optional(),
+  avatarUpdatedAt: z.string().datetime().nullable().optional(),
   contexts: z.array(authContextSchema).optional(),
   createdAt: z.string().datetime().optional(),
 });

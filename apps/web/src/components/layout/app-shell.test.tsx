@@ -55,6 +55,13 @@ describe('AppShell', () => {
     expect(screen.getByRole('button', { name: 'Tema' }).closest('header')).not.toBeNull();
   });
 
+  it('opens preferences from the user avatar menu', async () => {
+    const user = userEvent.setup();
+    renderShell();
+    await user.click(screen.getByRole('button', { name: 'Conta' }));
+    expect(await screen.findByRole('link', { name: 'Preferências' })).toHaveAttribute('href', '/preferences');
+  });
+
   it('shows the user classification as badges without the global platform label', () => {
     renderShell();
 
