@@ -67,11 +67,14 @@ describe('AppShell', () => {
   it('keeps sidebar icons and labels on one line', () => {
     renderShell();
     const accessLink = screen.getByRole('link', { name: 'Controle de acessos' });
+    const overviewLink = screen.getByRole('link', { name: 'Visão geral' });
 
     expect(accessLink).toHaveClass('flex', 'w-full', 'overflow-hidden');
     expect(accessLink).toHaveAttribute('data-sidebar', 'menu-button');
     expect(accessLink.className).not.toContain('({ isActive })');
     expect(within(accessLink).getByText('Controle de acessos')).toBeVisible();
+    expect(overviewLink).toHaveAttribute('data-active', 'true');
+    expect(overviewLink).toHaveClass('data-[active=true]:bg-sidebar-primary', 'data-[active=true]:text-sidebar-primary-foreground');
   });
 
   it('opens the notification panel with an accessible empty state', async () => {
