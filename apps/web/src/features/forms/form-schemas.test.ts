@@ -12,9 +12,9 @@ describe('mutation form schemas', () => {
     expect(strongPassword.safeParse('ÁrvoreSegura!2026').success).toBe(true);
   });
 
-  it('rejects unsafe tenant slugs', () => {
-    const result = createTenantFormSchema.safeParse({ name: 'Acme', slug: '../acme', segment: 'Research', adminName: 'Admin User', adminEmail: 'admin@acme.test', adminPassword: 'Secure!Pass123' });
-    expect(result.success).toBe(false);
+  it('accepts tenant creation without exposing a technical identifier', () => {
+    const result = createTenantFormSchema.safeParse({ name: 'Acme', segment: 'Research', adminName: 'Admin User', adminEmail: 'admin@acme.test', adminPassword: 'Secure!Pass123' });
+    expect(result.success).toBe(true);
   });
 
   it('rejects moving a user into the source project', () => {

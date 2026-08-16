@@ -6,7 +6,7 @@ const slug = z.string().trim().min(2).max(80).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
 export const createTenantSchema = z.object({
   name,
-  slug,
+  slug: slug.optional(),
   segment: z.string().trim().max(120).optional(),
   description: z.string().trim().max(1000).optional(),
   admin: z.object({ name, email: z.string().email().max(254), password: passwordSchema }).strict(),

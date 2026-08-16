@@ -57,9 +57,28 @@ describe('TenantsPage', () => {
 
     await user.click(screen.getByRole('button', { name: 'Adicionar organização' }));
 
+    expect(screen.queryByRole('textbox', { name: 'Identificador' })).not.toBeInTheDocument();
     const description = screen.getByRole('textbox', { name: 'Descrição' });
     expect(description.tagName).toBe('TEXTAREA');
     expect(description).toHaveAttribute('maxlength', '500');
     expect(description).toHaveAttribute('rows', '4');
+  });
+
+  it('permite mostrar e ocultar a senha do administrador inicial', async () => {
+    window.localStorage.setItem('personaia.locale', 'pt-BR');
+    const user = userEvent.setup();
+    render(<I18nProvider><MemoryRouter><TenantsPage /></MemoryRouter></I18nProvider>);
+
+    await user.click(screen.getByRole('button', { name: 'Adicionar organização' }));
+
+    const password = screen.getByLabelText('Senha');
+    expect(password).toHaveAttribute('type', 'password');
+
+    await user.click(screen.getByRole('button', { name: 'Mostrar senha' }));
+    expect(password).toHaveAttribute('type', 'text');
+    expect(screen.getByRole('button', { name: 'Ocultar senha' })).toHaveAttribute('aria-pressed', 'true');
+
+    await user.click(screen.getByRole('button', { name: 'Ocultar senha' }));
+    expect(password).toHaveAttribute('type', 'password');
   });
 });

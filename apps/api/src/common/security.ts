@@ -1,7 +1,16 @@
 import { createHash, randomBytes } from 'node:crypto';
 
 export const normalizeEmail = (email: string) => email.trim().toLowerCase();
-export const normalizeSlug = (slug: string) => slug.trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '');
+export const normalizeSlug = (slug: string) => slug
+  .trim()
+  .normalize('NFKD')
+  .replace(/\p{Diacritic}/gu, '')
+  .toLowerCase()
+  .replace(/[^a-z0-9-]+/g, '-')
+  .replace(/-+/g, '-')
+  .replace(/^-|-$/g, '')
+  .slice(0, 80)
+  .replace(/-+$/g, '');
 export const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
 export const newCsrfToken = () => randomBytes(32).toString('base64url');
 

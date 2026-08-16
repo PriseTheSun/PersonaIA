@@ -9,7 +9,6 @@ const email = z.string().trim().email('validation.email').max(254);
 
 export const createTenantFormSchema = z.object({
   name,
-  slug: z.string().trim().min(2, 'forms.validation.slug').max(80).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'forms.validation.slug'),
   segment: z.string().trim().min(2, 'forms.validation.name').max(120),
   description: z.string().trim().max(500).optional(),
   adminName: name,

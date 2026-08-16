@@ -49,11 +49,13 @@ describe('TenantsService', () => {
 
     const result = await new TenantsService(prisma).createTenant({
       name: tenant.name,
-      slug: tenant.slug,
       admin: { name: admin.name, email: admin.email, password: 'Senha-Forte-123!' },
     }, actor);
 
     expect(result.workspace).toBeNull();
+    expect(tx.tenant.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ slug: tenant.slug }),
+    });
     expect(tx.workspace.create).not.toHaveBeenCalled();
     expect(tx.workspaceMembership.create).not.toHaveBeenCalled();
     expect(tx.auditLog.create).toHaveBeenCalledWith({

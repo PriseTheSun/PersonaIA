@@ -59,7 +59,7 @@ export class TenantsService {
         const tenant = await tx.tenant.create({
           data: {
             name: input.name.trim(),
-            slug: normalizeSlug(input.slug),
+            slug: normalizeSlug(input.slug ?? input.name),
             segment: input.segment?.trim(),
             description: input.description?.trim(),
           },

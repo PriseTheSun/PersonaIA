@@ -4,6 +4,8 @@ describe('security helpers', () => {
   it('normalizes identifiers deterministically', () => {
     expect(normalizeEmail(' Admin@Example.COM ')).toBe('admin@example.com');
     expect(normalizeSlug(' Pesquisa Brasil 2026 ')).toBe('pesquisa-brasil-2026');
+    expect(normalizeSlug('Organização Árvore')).toBe('organizacao-arvore');
+    expect(normalizeSlug('Organização -- Árvore')).toBe('organizacao-arvore');
   });
 
   it('never stores a refresh token in plaintext', () => {
